@@ -50,7 +50,7 @@ I plan to port most cool hook based pacthes made for Project Diva Megamix+ for P
 Introducing fully ported **Debug mode** and **Freecam** mod from PC to Nintendo Switch! Oh, and rendering while paused.
 NOTE: Debug and freecam is totally disabled by default. You should go to global config.toml at sdmc:/MikuMikuSwitchPlugin/ and change `debug = false` to `debug = true`
 
-### Here is a list of debug and freecam features:
+Here is a list of debug and freecam features:
 - Access _most_ of debug game substates
 - Advanced freecam in Rhythm game, PV modes; In customization menu as well; Pausing will make game render stuff
 - Use mouse to open a real time dw gui for other debug windows by right click (Ctrl + RMC alternative)
@@ -62,7 +62,7 @@ NOTE: Debug and freecam is totally disabled by default. You should go to global 
 - Excluding any (ig?) conflicts with game and between each other making it possible to use freecam in debug
 
 
-### Hotkeys:
+Hotkeys:
 
 **Freecam**
 - (L + R + Minus) — Enable/Disable Freecam
@@ -98,7 +98,7 @@ NOTE: Debug and freecam is totally disabled by default. You should go to global 
 -------------------------------------------------------------------------------------------------------------------------
 
 
-### ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher:
+ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher:
 
 - ImGui interface can be toggled by pressing "+" & "-" for 2 seconds
 - InputOverlay can be toggled and changed (2 modes: keyboard and joycons)
@@ -112,7 +112,7 @@ NOTE: Debug and freecam is totally disabled by default. You should go to global 
 
 -------------------------------------------------------------------------------------------------------------------------
 
-### Other info:
+Other info:
 - If youre from older version, remember to move files from DMLSwitchPort to MikuMikuSwitchPlugin
 - Config lets you set many things, all explained
 - Bone Control is a part of DivaImGUI
@@ -199,111 +199,111 @@ const char *possible_tids[] = {
 enabled = true
 debug = false
 
-### Priority list (Top is highest priority).
-### New mods found on SD are automatically appended here.
+Priority list (Top is highest priority).
+New mods found on SD are automatically appended here.
 priority = [
 ]
 
 [gameplay]
-### Master toggle for New Classics mod features
+Master toggle for New Classics mod features
 new_classics = false
-### Challenge Time mode: "enabled" (force all difficulties), "disabled" (completely off), "default" (vanilla)
+Challenge Time mode: "enabled" (force all difficulties), "disabled" (completely off), "default" (vanilla)
 challenge_time = "enabled"
-### Removes Copyright & PV watermark text during playback
+Removes Copyright & PV watermark text during playback
 remove_watermarks = true
-### Disables hand model scaling in PVs
+Disables hand model scaling in PVs
 disable_hand_scaling = false
-### Disables PV lyrics display
+Disables PV lyrics display
 disable_lyrics = false
-### Forces Japanese region/language mode
+Forces Japanese region/language mode
 force_japanese = false
-### PS4 FTUI forced leftovers
+PS4 FTUI forced leftovers
 force_ft_ui = false
-### ExPatch (unlocks Extreme charts by default)
+ExPatch (unlocks Extreme charts by default)
 ExPatch = true
 
-### ENABLE USB KEYBOARD SUPPORT
-### Notes / D-Pad: W, A, S, D / Arrows
-### Arcade Buttons: I, J, K, L
-### Left Stick: Q, E (Left / Right)
-### Right Stick: U, O (Left / Right)
-### Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/Spacebar/CapsLock (ZL), RightCtrl/,/; (ZR)
-### Menus: Esc (B), Enter/P (+), Tab (-)
+ENABLE USB KEYBOARD SUPPORT
+Notes / D-Pad: W, A, S, D / Arrows
+Arcade Buttons: I, J, K, L
+Left Stick: Q, E (Left / Right)
+Right Stick: U, O (Left / Right)
+Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/Spacebar/CapsLock (ZL), RightCtrl/,/; (ZR)
+Menus: Esc (B), Enter/P (+), Tab (-)
 enable_keyboard = true
 
 [new_classics]
-### Sustain (Rush) SE ID: -1 = Default/Off, 1 = Sustain A, 2 = Sustain B, 3 = C, 4 = D, 5 = E
+Sustain (Rush) SE ID: -1 = Default/Off, 1 = Sustain A, 2 = Sustain B, 3 = C, 4 = D, 5 = E
 sustain_se_id = 3
-### Double SE ID: -1 = Inherit, 1 = Double A, 2 = Double B, 3 = C, 4 = D, 5 = E
+Double SE ID: -1 = Inherit, 1 = Double A, 2 = Double B, 3 = C, 4 = D, 5 = E
 double_se_id = 3
-### Star SE ID: 1 = Star A .. 9 = Star I
+Star SE ID: 1 = Star A .. 9 = Star I
 star_se_id = 7
-### Link Star SE ID: -1 = Same as Star, 1 = Link A .. 5 = Link E
+Link Star SE ID: -1 = Same as Star, 1 = Link A .. 5 = Link E
 link_se_id = 3
-### Double Star (D-Star) SE ID: -1 = Same as Star, 1 = D-Star A .. 5 = D-Star E
+Double Star (D-Star) SE ID: -1 = Same as Star, 1 = D-Star A .. 5 = D-Star E
 dstar_se_id = 4
-### Technical Zone Display: 0 = Off, 1 = Console/Mixed Only, 2 = Always
+Technical Zone Display: 0 = Off, 1 = Console/Mixed Only, 2 = Always
 tech_zone_display = 2
-### Technical Zone Display Style: 0 = F, 1 = F 2nd, 2 = X, 3 = Future Tone, 6 = Mega Mix+, 20 = Match UI
+Technical Zone Display Style: 0 = F, 1 = F 2nd, 2 = X, 3 = Future Tone, 6 = Mega Mix+, 20 = Match UI
 tech_zone_sound_priority = 1
-### Stick Sensitivity for Star notes: integer percentage from 20 to 80 (Default: 30)
+Stick Sensitivity for Star notes: integer percentage from 20 to 80 (Default: 30)
 stick_sensitivity = 30
-### Flick Control SE: 0 = Slide, 1 = Star, 2 = Off
+Flick Control SE: 0 = Slide, 1 = Star, 2 = Off
 flick_control_se = 0
-### General Sound Priority: 0 = Disabled, 1 = F 2nd, 2 = Arcade, 3 = Console
+General Sound Priority: 0 = Disabled, 1 = F 2nd, 2 = Arcade, 3 = Console
 sound_priority = 0
-### Star Control Mode: 0 = Sticks Only, 1 = Buttons Only, 2 = Both
+Star Control Mode: 0 = Sticks Only, 1 = Buttons Only, 2 = Both
 star_control = 2
 
 [graphics]
-### Disables ADP (Adaptive Performance) system completely
+Disables ADP (Adaptive Performance) system completely
 disable_adp = true
-### Enable Subsurface Scattering (SSS) for Future Tone style graphics
+Enable Subsurface Scattering (SSS) for Future Tone style graphics
 enable_sss = true
-### Customization menu graphics in AFT/FT style (removes cell-shading in menu)
+Customization menu graphics in AFT/FT style (removes cell-shading in menu)
 cstm_menu_ft_style = true
-### Anti-Aliasing mode: "mlaa", "fxaa", "off"
+Anti-Aliasing mode: "mlaa", "fxaa", "off"
 anti_aliasing = "mlaa"
-### Texture Magnification Filter: "bilinear", "nearest", "sharpen_5tap", "sharpen_4tap", "cone_4tap", "cone_2tap", "default"
+Texture Magnification Filter: "bilinear", "nearest", "sharpen_5tap", "sharpen_4tap", "cone_4tap", "cone_2tap", "default"
 mag_filter = "sharpen_5tap"
-### SSAA (Super Sampling) mode: "on", "off"
+SSAA (Super Sampling) mode: "on", "off"
 ssaa_mode = "off"
-### Force Disables (true = Disabled, false = Vanilla Enabled)
+Force Disables (true = Disabled, false = Vanilla Enabled)
 force_disable_reflections = false
 force_disable_shadows = false
 force_disable_self_shadow = false
 force_disable_DOF = false
-### Forces Future Tone Mode extra patches to get maximumly close to MM+ 
+Forces Future Tone Mode extra patches to get maximumly close to MM+ 
 extraFtGraphics = true
-### Exposure value multiplier: 0.0 to 4.0 (Default 1.0)
+Exposure value multiplier: 0.0 to 4.0 (Default 1.0)
 exposure = 1.000000
-### Gamma correction: 0.0 to 1.0 (Set to -1.0 for game default)
+Gamma correction: 0.0 to 1.0 (Set to -1.0 for game default)
 gamma = -1.000000
-### FXAA Settings: 0.0 to 1.0 (Set to -1.0 for game default)
+FXAA Settings: 0.0 to 1.0 (Set to -1.0 for game default)
 fxaa_subpix = -1.000000
 fxaa_edge_threshold = -1.000000
 fxaa_edge_threshold_min = -1.000000
 
-### Preset resolution toggles using predefined FT/AFT resolution patches
+Preset resolution toggles using predefined FT/AFT resolution patches
 ft_shadows = true
 ft_reflect = true
 ft_refract = true
-### Enables advanced mode: overrides FT presets with custom resolutions from advanced
+Enables advanced mode: overrides FT presets with custom resolutions from advanced
 advanced_graphics = false
 
 [graphics.optimisations]
-### Enables 30 FPS rendering limits
+Enables 30 FPS rendering limits
 force_30fps_rendering = false
-### Resolution scaling factor (Stub for scale getter): 1.0, 0.9, 0.8, 0.675, 0.6, 0.5
+Resolution scaling factor (Stub for scale getter): 1.0, 0.9, 0.8, 0.675, 0.6, 0.5
 res_scaler = 1.000000
-### Reflection quality multiplier: 0.0 to 1.0 (Default 1.0)
+Reflection quality multiplier: 0.0 to 1.0 (Default 1.0)
 reflection_quality = 1.000000
-### Shadow intensity/opacity multiplier: 0.0 to 1.4
-### WARNING: Setting shadow_intensity higher than 1.0 may break shadow rendering!
+Shadow intensity/opacity multiplier: 0.0 to 1.4
+WARNING: Setting shadow_intensity higher than 1.0 may break shadow rendering!
 shadow_intensity = 1.000000
 
 [graphics.advanced]
-### Individual custom resolutions (Active ONLY when advanced_graphics = true)
+Individual custom resolutions (Active ONLY when advanced_graphics = true)
 shadow_map_1_w = 2048
 shadow_map_1_h = 2048
 shadow_viewport_w = 2048
@@ -326,5 +326,5 @@ refract_w = 1024
 refract_h = 512
 
 [leftover]
-### Master toggle for FT UI (its dead so dont enable it)
+Master toggle for FT UI (its dead so dont enable it)
 ft_ui = false
