@@ -1,6 +1,6 @@
 #include "StrArray.hpp"
 #include "lib.hpp"
-#include "patches.hpp"
+#include "macros.hpp"
 #include "ModLoader.hpp"
 #include "toml.hpp"
 #include <unordered_map>
@@ -12,16 +12,16 @@
 // =========================================================
 // ADDRESSES & CONSTANTS (NSO = Ghidra - 0x100)
 // =========================================================
-#define ADDR_LOAD_STR_ARRAY        FIX(0x15D210) 
-#define ADDR_GET_STR               FIX(0x15D480) 
-#define ADDR_GET_LANG_DIR          FIX(0x21CA70) 
+#define ADDR_LOAD_STR_ARRAY        FIX(0x15D210)
+#define ADDR_GET_STR               FIX(0x15D480)
+#define ADDR_GET_LANG_DIR          FIX(0x21CA70)
 
 #define ADDR_CALL_MODULE_NAME      FIX(0x3C40D8)
 #define ADDR_CALL_CUSTOMIZE_NAME   FIX(0x3BBEA0)
 #define ADDR_CALL_BTN_SE_NAME      FIX(0x3B5C1C)
 #define ADDR_CALL_CHAIN_SLIDE_NAME FIX(0x3B77FC)
-#define ADDR_CALL_SLIDER_TOUCH     FIX(0x3D9CD4) 
-#define ADDR_CALL_SLIDE_SE_NAME    FIX(0x3DB764) 
+#define ADDR_CALL_SLIDER_TOUCH     FIX(0x3D9CD4)
+#define ADDR_CALL_SLIDE_SE_NAME    FIX(0x3DB764)
 
 // ARM64 NOP instruction
 constexpr uint32_t ARM64_NOP = 0xD503201F;
@@ -41,12 +41,12 @@ static void readStrArray(const toml::table* table, StrByIdMap& dstStrMap) {
     if (!table) return;
     for (auto&&[key, value] : *table) {
         if (value.is_table() || value.is_array()) continue;
-        
+
         // Use temporary string to ensure null-termination for strtol
         std::string keyStr(key.data(), key.length());
         char* end = nullptr;
         const int id = std::strtol(keyStr.c_str(), &end, 10);
-        
+
         if (end != keyStr.c_str() && dstStrMap.find(id) == dstStrMap.end()) {
             if (value.is_string()) {
                 dstStrMap.insert({ id, std::string(value.as_string()->get()) });
@@ -69,7 +69,7 @@ static void readStrArray(const toml::table* table, const toml::table* langTable,
 
 static void loadStrArray(const std::string& filePath) {
     nn::fs::FileHandle h;
-    if (R_FAILED(nn::fs::OpenFile(&h, filePath.c_str(), nn::fs::OpenMode_Read))) return; 
+    if (R_FAILED(nn::fs::OpenFile(&h, filePath.c_str(), nn::fs::OpenMode_Read))) return;
 
     int64_t size = 0;
     nn::fs::GetFileSize(&size, h);
@@ -84,14 +84,14 @@ static void loadStrArray(const std::string& filePath) {
 
     toml::parse_result result = toml::parse(fileContent);
     if (!result) return;
-    
+
     toml::table table = std::move(result.table());
-    
+
     typedef const char* (*GetLangDirT)();
     GetLangDirT getLangDir = (GetLangDirT)(exl::util::GetMainModuleInfo().m_Total.m_Start + ADDR_GET_LANG_DIR);
-    
+
     const char* langPath = getLangDir();
-    
+
     // FIX: Use strrchr to find the LAST slash to get folder name (e.g. "en" from "rom/lang2/en")
     const char* lastSlash = strrchr(langPath, '/');
     const char* langName = lastSlash ? (lastSlash + 1) : langPath;
@@ -111,43 +111,42 @@ static void loadStrArray(const std::string& filePath) {
 // BASE HOOKS (TRAMPOLINE)
 HOOK_DEFINE_TRAMPOLINE(LoadStrArrayHook) {
     static void Callback() {
-        Orig(); 
-        
+        Orig();
+
         // Load strings from every mod directory
         for (const auto& modPath : ModLoader::modDirectoryPaths) {
-            loadStrArray(modPath + "/rom/lang2/mod_str_array.toml"); 
-            loadStrArray(modPath + "/rom/lang2/str_array.toml");     
+            loadStrArray(modPath + "/rom/lang2/mod_str_array.toml");
+            loadStrArray(modPath + "/rom/lang2/str_array.toml");
         }
-        
+
         // Load localized DML specific and DLC string arrays
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/mod_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/str_array.toml");
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/mdata_str_array.toml");
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/privilege_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc1_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc2A_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc2B_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc3A_str_array.toml"); 
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc3B_str_array.toml");  
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc4_str_array.toml");  
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc7_str_array.toml");  
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc8_str_array.toml");  
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc9_str_array.toml");  
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc10_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc11_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc12_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc13_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc14_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc15_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc16_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc17_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc18_str_array.toml");   
-        loadStrArray("ExlSD:/DMLSwitchPort/lang2/dlc19_str_array.toml"); 
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/mod_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/mdata_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/privilege_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc1_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc2A_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc2B_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc3A_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc3B_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc4_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc7_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc8_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc9_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc10_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc11_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc12_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc13_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc14_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc15_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc16_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc17_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc18_str_array.toml");
+        loadStrArray("ExlSD:/MikuMikuSwitchPlugin/lang2/dlc19_str_array.toml");
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(GetStrHook) {
-public: 
     static const char* Callback(int32_t id) {
         auto it = strMap.find(id);
         if (it != strMap.end()) return it->second.c_str();

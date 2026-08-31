@@ -16,10 +16,10 @@ namespace exl::setting {
     constexpr size_t HeapSize = 0x2000000;
 
     /* How large the JIT area will be for hooks. */
-    constexpr size_t JitSize = 0x10000;
+    constexpr size_t JitSize = 0x40000;
 
     /* How large the area will be inline hook pool. */
-    constexpr size_t InlinePoolSize = 0x10000;
+    constexpr size_t InlinePoolSize = 0x40000;
 
     /* How large the formatting buffer should be for logging. The buffer will be on the stack. */
     constexpr size_t LogBufferSize = 512;

@@ -39,13 +39,13 @@ namespace DebugMode {
         }
     };
 
-    // Глобальная переменная для состояния дебага (объявление)
     extern bool g_DebugModeEnabled;
 
-    // Прототипы функций
+    // Function prototypes
     void ToggleDebugModePatches();
     void ForceGameSubState(GameState state, GameSubState substate);
     void ChangeGameSubState(GameState state, GameSubState substate);
+    void RequestStateChange(GameState state, GameSubState substate);
     void ProcessDebugInputs();
     void Init();
 }

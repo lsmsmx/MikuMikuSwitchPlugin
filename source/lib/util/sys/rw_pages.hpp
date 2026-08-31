@@ -24,7 +24,7 @@ namespace exl::util {
                 }
 
                 constexpr size_t GetAlignedSize() const {
-                    return ALIGN_UP(m_Size, PAGE_SIZE);
+                    return ALIGN_UP((m_Ro - GetAlignedRo()) + m_Size, PAGE_SIZE);
                 }
 
                 constexpr ptrdiff_t RoToOffset(uintptr_t address) const {

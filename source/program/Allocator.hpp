@@ -1,6 +1,6 @@
 #pragma once
 #include "lib.hpp"
-#include "patches.hpp" // For the FIX macro
+#include "macros.hpp"
 #include <cstddef>
 
 // =========================================================

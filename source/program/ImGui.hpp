@@ -2,9 +2,8 @@
 #include "lib.hpp"
 
 
-namespace MotionImGui {
+namespace ImGui {
     extern bool g_isMenuOpen;
     extern bool g_imguiHasFocus;
-    void CheckToggles();
     void Init();
 }

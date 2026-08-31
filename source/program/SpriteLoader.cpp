@@ -1,6 +1,6 @@
 #include "SpriteLoader.hpp"
 #include "lib.hpp"
-#include "patches.hpp" 
+#include "macros.hpp"
 
 // =========================================================
 // NSO Offsets (Ghidra - 0x100)

@@ -2,8 +2,18 @@
 #include <cstdint>
 
 namespace InputOverlay {
-    void CheckToggles();
+    enum Mode {
+        Mode_Disabled = 0,
+        Mode_Gamepad  = 1,
+        Mode_Keyboard = 2
+    };
+
+    int GetMode();
+    void SetMode(int mode);
     bool IsVisible();
-    void SetVisible(bool state);
+    void SetVisible(bool state); // Backward compatibility
+
     void Draw();
+    void DrawGamepad();
+    void DrawKeyboard();
 }
