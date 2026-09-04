@@ -91,7 +91,6 @@ namespace DebugMode {
 
         if (!g_DebugModeEnabled) return;
 
-        // D-Pad Hotkeys (Safe transitions)
         if ((keysHeld & nn::hid::Button::L) && (keysHeld & nn::hid::Button::R)) {
             if (keysDown & nn::hid::Button::Down)   { ChangeGameState(GameState::DATA_TEST); }
             if (keysDown & nn::hid::Button::Up)     { ChangeGameState(GameState::TEST_MODE); }
@@ -152,16 +151,15 @@ namespace DebugMode {
 
             float frameComp = dt * 60.0f;
 
-            // 1. Joystick
+            // 1. Joystick movement
             float lx = (float)mergedState.analogStickL[0] / 32767.0f;
             float ly = (float)mergedState.analogStickL[1] / 32767.0f;
-
             float speed = (keysHeld & nn::hid::Button::Y) ? 12.0f : 5.0f;
 
             if (std::abs(lx) > 0.15f) dis->MouseX += (int32_t)(speed * lx * frameComp);
             if (std::abs(ly) > 0.15f) dis->MouseY -= (int32_t)(speed * ly * frameComp);
 
-            // 2. USB Mouse
+            // 2. USB Mouse support
             if (nn::hid::GetMouseState) {
                 nn::hid::MouseState ms = {};
                 nn::hid::GetMouseState(&ms);
@@ -171,20 +169,43 @@ namespace DebugMode {
                 if (ms.buttons & 2) isZR = true;
             }
 
-            // 3. Touch Screen
-            if (nn::hid::GetTouchScreenStates) {
+            // 3. Touch Screen with Multi-finger Click Delay Protection
+            static int s_touchFrames = 0;
+            static int s_maxFingersThisSession = 0;
+
+            if (nn::hid::GetTouchScreenState) {
                 nn::hid::TouchScreenState ts = {};
-                nn::hid::GetTouchScreenStates(&ts, 1);
+                nn::hid::GetTouchScreenState(&ts);
+
                 if (ts.count > 0) {
-                    dis->MouseX = (int32_t)(ts.touches[0].x * (1920.0f / 1280.0f));
-                    dis->MouseY = (int32_t)(ts.touches[0].y * (1080.0f / 720.0f));
-                    isZL = true;
+                    // Keep track of coordinates from the first finger
+                    dis->MouseX = std::clamp((int32_t)ts.touches[0].x, 0, 1279);
+                    dis->MouseY = std::clamp((int32_t)ts.touches[0].y, 0, 719);
+
+                    s_touchFrames++;
+                    if (ts.count > s_maxFingersThisSession) {
+                        s_maxFingersThisSession = ts.count;
+                    }
+
+                    // Wait 3 frames (~50ms) to see if a second finger joins in
+                    if (s_touchFrames > 3) {
+                        if (s_maxFingersThisSession >= 2) {
+                            isZR = true; // Two fingers = Right Click (Bit 102)
+                        } else {
+                            isZL = true; // One finger = Left Click (Bit 100)
+                        }
+                    }
+                } else {
+                    // Reset session when all fingers are lifted
+                    s_touchFrames = 0;
+                    s_maxFingersThisSession = 0;
                 }
             }
 
-            dis->MouseX = std::clamp(dis->MouseX, 0, 1919);
-            dis->MouseY = std::clamp(dis->MouseY, 0, 1079);
+            dis->MouseX = std::clamp(dis->MouseX, 0, 1279);
+            dis->MouseY = std::clamp(dis->MouseY, 0, 719);
 
+            // Apply bits to the engine structure
             static bool s_zlPressed = false;
             static bool s_zrPressed = false;
 

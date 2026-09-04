@@ -1,7 +1,7 @@
 #include "fs.hpp"
 #include "lib.hpp"
 
- // Нативный логгер
+//
 void WriteLog(const char* format, ...) {
      char logBuffer[512];
      va_list args;

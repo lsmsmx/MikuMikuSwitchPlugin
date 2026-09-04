@@ -66,6 +66,7 @@ void Draw() {
     if (ImGui::CollapsingHeader("State Switcher")) {
         ImGui::Separator();
 
+
         ImGui::BeginChild("StateScrollRegion", ImVec2(390, 220), true);
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
@@ -81,9 +82,8 @@ void Draw() {
             }
         }
 
-        ImGui::GetWindowDrawList()->PopClipRect();
         ImGui::EndChild();
     }
 }
 
-}
+} // namespace StateSwitcher

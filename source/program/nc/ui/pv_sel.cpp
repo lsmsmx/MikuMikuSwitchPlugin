@@ -231,7 +231,6 @@ namespace pvsel
 			//WriteLog("[AET_DEBUG] Polling... aet_loading: %d | spr_loading: %d\n", aet_loading, spr_loading);
 		}
 
-		// Ловим момент успешной загрузки
 		if (!aet_loading && !spr_loading && !assets_loaded)
 		{
 			//WriteLog("[AET_DEBUG] SUCCESS! Both AET and SPR loaded.\n");

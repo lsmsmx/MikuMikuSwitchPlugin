@@ -211,16 +211,13 @@ void SaveSD() {
         std::memcpy(buffer.data() + off, &cEx, sizeof(CstmItemEx));
     }
 
-    nn::fs::FileHandle h;
-    if (R_FAILED(nn::fs::OpenFile(&h, SAVE_PATH, nn::fs::OpenMode_Write))) {
-        nn::fs::CreateFile(SAVE_PATH, totalSize);
-    } else {
-        nn::fs::CloseFile(h);
-    }
-
-    if (R_SUCCEEDED(nn::fs::OpenFile(&h, SAVE_PATH, nn::fs::OpenMode_Write))) {
-        nn::fs::WriteFile(h, 0, buffer.data(), totalSize, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
-        nn::fs::CloseFile(h);
+    nn::fs::DeleteFile(SAVE_PATH);
+    if (R_SUCCEEDED(nn::fs::CreateFile(SAVE_PATH, totalSize))) {
+        nn::fs::FileHandle h;
+        if (R_SUCCEEDED(nn::fs::OpenFile(&h, SAVE_PATH, nn::fs::OpenMode_Write))) {
+            nn::fs::WriteFile(h, 0, buffer.data(), totalSize, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
+            nn::fs::CloseFile(h);
+        }
     }
 }
 

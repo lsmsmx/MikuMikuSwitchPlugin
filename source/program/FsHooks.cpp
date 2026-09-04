@@ -8,12 +8,6 @@
 #include <lib/reloc/reloc.hpp>
 #include <nn/fs.hpp>
 
-#include <stdlib.h>
-#include <stdio.h>
-
-// #include "Allocator.hpp"
-// #include "logger.hpp"
-
 namespace FsHooks {
 
 static char g_AmsRomfsBase[512] = {0};
@@ -213,74 +207,8 @@ HOOK_DEFINE_TRAMPOLINE(FlushFileHook) {
     }
 };
 
-uintptr_t GetGhidraOffset(void* retAddr) {
-    uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
-    uintptr_t addr = reinterpret_cast<uintptr_t>(retAddr);
-    if (addr >= base) return addr - base;
-    return addr;
-}
-
-
-/*
-HOOK_DEFINE_TRAMPOLINE(StandardAllocatorInitHook) {
-    static void Callback(void* thisPtr, void* address, size_t size) {
-        uintptr_t caller = GetGhidraOffset(__builtin_return_address(0));
-        size_t sizeMB = size / (1024 * 1024);
-
-        WriteLog("[POOL INIT] Allocator: 0x%p | Buf: 0x%p | Size: %zu MB (0x%zx) | Caller in Ghidra: 0x%lx\n",
-                 thisPtr, address, sizeMB, size, caller);
-
-
-        Orig(thisPtr, address, size);
-    }
-};
-
-
-HOOK_DEFINE_TRAMPOLINE(StandardAllocatorAllocHook) {
-    static void* Callback(void* thisPtr, size_t size, size_t alignment) {
-        void* result = Orig(thisPtr, size, alignment);
-        uintptr_t caller = GetGhidraOffset(__builtin_return_address(0));
-
-
-        if (result == nullptr && size > 0) {
-            WriteLog("[OOM FAIL] Allocator: 0x%p | Size: %zu bytes (%.2f MB) | Align: %zu | Caller in Ghidra: 0x%lx\n",
-                     thisPtr, size, (float)size / (1024.0f * 1024.0f), alignment, caller);
-        }
-
-        else if (size >= 20 * 1024 * 1024) {
-            WriteLog("[BIG ALLOC OK] Allocator: 0x%p | Size: %.2f MB | Res: 0x%p | Caller in Ghidra: 0x%lx\n",
-                     thisPtr, (float)size / (1024.0f * 1024.0f), result, caller);
-        }
-
-        return result;
-    }
-};*/
-
-/*
-// prj::HeapCMalloc: 900 -> 1.75
-void PatchMasterHeapLimit() {
-    WriteLog("[HEAP PATCH] Patching prj::HeapCMalloc limit from 900 MB to 1792 MB (1.75 GB)...\n");
-
-    // 1. FUN_0004c030: (Initialize)
-    exl::patch::CodePatcher(0x0004C060).Write<uint32_t>(0x52AE0002); // mov w2, #0x70000000
-    exl::patch::CodePatcher(0x0004C078).Write<uint32_t>(0x52AE0002); // mov w2, #0x70000000
-
-    // 2. FUN_0004c380: (Free)
-    exl::patch::CodePatcher(0x0004C398).Write<uint32_t>(0x52AE0009); // mov w9, #0x70000000
-
-    // 3. FUN_0004c440: (Realloc)
-    exl::patch::CodePatcher(0x0004C458).Write<uint32_t>(0x52AE0009); // mov w9, #0x70000000
-
-    // 4. FUN_0004c5b0: (Allocate)
-    exl::patch::CodePatcher(0x0004C5E0).Write<uint32_t>(0x52AE0009); // mov w9, #0x70000000
-
-    // 5. FUN_0004c730: (GetSize)
-    exl::patch::CodePatcher(0x0004C780).Write<uint32_t>(0x52AE0009); // mov w9, #0x70000000
-
-    WriteLog("[HEAP PATCH] Done! prj::HeapCMalloc is now 1.75 GB!\n");
-}*/
-
 void Init() {
+
     if (!Config::enableDebug) return;
 
     uintptr_t addr;
@@ -300,16 +228,6 @@ void Init() {
         FlushFileHook::InstallAtFuncPtr(reinterpret_cast<decltype(&FlushFileHook::Callback)>(addr));
     if ((addr = FindSymbol("_ZN2nn2fs10RenameFileEPKcS2_")))
         RenameFileHook::InstallAtFuncPtr(reinterpret_cast<decltype(&RenameFileHook::Callback)>(addr));
-/*
-    if ((addr = FindSymbol("_ZN2nn3mem17StandardAllocator10InitializeEPvm")))
-        StandardAllocatorInitHook::InstallAtFuncPtr(reinterpret_cast<decltype(&StandardAllocatorInitHook::Callback)>(addr));
-
-    if ((addr = FindSymbol("_ZN2nn3mem17StandardAllocator8AllocateEmm")))
-        StandardAllocatorAllocHook::InstallAtFuncPtr(reinterpret_cast<decltype(&StandardAllocatorAllocHook::Callback)>(addr));
-
-
-    PatchMasterHeapLimit();*/
-
 }
 
 } // namespace FsHooks

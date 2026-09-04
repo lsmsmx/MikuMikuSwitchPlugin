@@ -1,6 +1,6 @@
 #pragma once
 #include "lib.hpp"
-#include "keyboard.hpp"
+#include "keyboard_sliders.hpp"
 #include <stdint.h>
 #include <cmath>
 #include <nn/os.hpp>
@@ -53,14 +53,15 @@ namespace nn::hid {
     };
 
     typedef void (*InitializeDeviceFunc)();
-    typedef int (*GetTouchScreenStatesFunc)(TouchScreenState* outStates, int count);
+    // Fixed: Matches void (TouchScreenState*) from your Ghidra
+    typedef void (*GetTouchScreenStateFunc)(TouchScreenState* outState);
     typedef void (*GetMouseStateFunc)(MouseState* out);
     typedef void (*GetKeyboardStateFunc)(KeyboardState* out);
 
     inline InitializeDeviceFunc InitializeTouchScreen = nullptr;
     inline InitializeDeviceFunc InitializeMouse = nullptr;
     inline InitializeDeviceFunc InitializeKeyboard = nullptr;
-    inline GetTouchScreenStatesFunc GetTouchScreenStates = nullptr;
+    inline GetTouchScreenStateFunc GetTouchScreenState = nullptr;
     inline GetMouseStateFunc GetMouseState = nullptr;
     inline GetKeyboardStateFunc GetKeyboardState = nullptr;
 
@@ -73,7 +74,8 @@ namespace nn::hid {
         const char* symFullKey  = "_ZN2nn3hid12GetNpadStateEPNS0_16NpadFullKeyStateERKj";
         const char* symJoyDual  = "_ZN2nn3hid12GetNpadStateEPNS0_16NpadJoyDualStateERKj";
         const char* symInitTouch = "_ZN2nn3hid21InitializeTouchScreenEv";
-        const char* symGetTouch  = "_ZN2nn3hid20GetTouchScreenStatesEPNS0_16TouchScreenStateEi";
+        // EXACT SYMBOL FROM YOUR GHIDRA SCREENSHOT:
+        const char* symGetTouch  = "_ZN2nn3hid19GetTouchScreenStateILm4EEEvPNS0_16TouchScreenStateIXT_EEE";
         const char* symInitMouse = "_ZN2nn3hid15InitializeMouseEv";
         const char* symGetMouse  = "_ZN2nn3hid13GetMouseStateEPNS0_10MouseStateE";
         const char* symInitKb    = "_ZN2nn3hid18InitializeKeyboardEv";
@@ -91,7 +93,7 @@ namespace nn::hid {
                 resolve(symFullKey, GetNpadStateFullKey);
                 resolve(symJoyDual, GetNpadStateJoyDual);
                 resolve(symInitTouch, InitializeTouchScreen);
-                resolve(symGetTouch, GetTouchScreenStates);
+                resolve(symGetTouch, GetTouchScreenState);
                 resolve(symInitMouse, InitializeMouse);
                 resolve(symGetMouse, GetMouseState);
                 resolve(symInitKb, InitializeKeyboard);
@@ -118,18 +120,15 @@ namespace nn::hid {
 
         NpadHandheldState merged = {};
 
-        // 1. Poll Handheld (Joy-Con rails)
         if (GetNpadStateHandheld) {
             GetNpadStateHandheld(&merged, CONTROLLER_HANDHELD);
-
             if ((merged.attributes & 1) != 0) {
-                keyboard::Inject(&merged); // Inject keyboard input into state
+                keyboard_sliders::Inject(&merged);
                 cached_state = merged;
                 return merged;
             }
         }
 
-        // 2. Poll external controllers
         auto merge_sticks = [&](const NpadHandheldState& s) {
             if (std::abs(s.analogStickL[0]) > std::abs(merged.analogStickL[0])) merged.analogStickL[0] = s.analogStickL[0];
             if (std::abs(s.analogStickL[1]) > std::abs(merged.analogStickL[1])) merged.analogStickL[1] = s.analogStickL[1];
@@ -143,7 +142,7 @@ namespace nn::hid {
         merged.buttons |= sFK.buttons | sJD.buttons;
         merge_sticks(sFK); merge_sticks(sJD);
 
-        keyboard::Inject(&merged); // Inject keyboard input into state
+        keyboard_sliders::Inject(&merged);
 
         cached_state = merged;
         return merged;

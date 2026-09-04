@@ -18,7 +18,7 @@
 #include "StrArray.hpp"
 #include "AetDB.hpp"
 #include "SpriteDrawLimitPatch.hpp"
-#include "keyboard.hpp"
+#include "keyboard_sliders.hpp"
 
 //#include "ft_ui/ft_ui.hpp"
 #include "nc/nc.hpp"
@@ -51,12 +51,11 @@ HOOK_DEFINE_TRAMPOLINE(MainHook) {
         InitFreeCam();
         ImGui::Init();
 
-        //ft_ui::init();
         nc::init();
         nc::ApplyConfig();
         shared_hooks::init();
 
-        keyboard::init();
+        keyboard_sliders::init();
 
         FsHooks::Init();
 
@@ -81,5 +80,6 @@ extern "C" void exl_main(void* x0, void* x1) {
     PvLoader::init();
     AetDB::init();
     SpriteDrawLimitPatch::init();
+
 
 };

@@ -20,6 +20,7 @@ struct Config {
     static bool forceJapanese;
     static bool forceFtUI;
     static bool ExPatch;
+    static bool enableTouch;
     static bool enableKeyboard;
 
     // Page 1/3 (5 items)

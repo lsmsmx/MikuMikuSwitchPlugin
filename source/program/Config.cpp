@@ -25,6 +25,7 @@ bool Config::disableLyrics = false;
 bool Config::forceJapanese = false;
 bool Config::forceFtUI = false;
 bool Config::ExPatch = true;
+bool Config::enableTouch = false;
 bool Config::enableKeyboard = false;
 
 // Page 1/3
@@ -130,8 +131,10 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# PS4 FTUI forced leftovers\n";
     tomlContent += "force_ft_ui = " + std::string(Config::forceFtUI ? "true" : "false") + "\n";
     tomlContent += "# ExPatch (unlocks Extreme charts by default)\n";
-    tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n\n";
-    tomlContent += "# ENABLE USB KEYBOARD SUPPORT\n";
+    tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n";
+    tomlContent += "# Touch-to-Sliders SUPPORT (two sticks all directions imitation with touchscreen)\n";
+    tomlContent += "enable_touch = " + std::string(Config::enableTouch ? "true" : "false") + "\n";
+    tomlContent += "# USB KEYBOARD SUPPORT\n";
     tomlContent += "# Notes / D-Pad: W, A, S, D / Arrows\n";
     tomlContent += "# Arcade Buttons: I, J, K, L\n";
     tomlContent += "# Left Stick: Q, E (Left / Right)\n";
@@ -236,6 +239,34 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "refract_w = " + std::to_string(Config::refractW) + "\n";
     tomlContent += "refract_h = " + std::to_string(Config::refractH) + "\n\n";
 
+    tomlContent += "#                    HOTKEYS SHEET                  \n";
+    tomlContent += "# [ Touchscreen->Mouse ]       : One/Two fingers\n";
+    tomlContent += "# [ IMGUI ]\n";
+    tomlContent += "#   - Hold Plus + Minus (0.8s) : Toggle Debug Menu\n";
+    tomlContent += "#   - Hold ZL + ZR (0.5s)      : Toggle Focus (Game <-> Menu)\n";
+    tomlContent += "#   - LStick (+ Hold Y)        : Cursor move (+ Turbo speed)\n";
+    tomlContent += "#   - ZL / ZR                  : Left Click / Right Click\n";
+    tomlContent += "#   - Hold L3 + R3 (0.8s)      : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
+    tomlContent += "#   - Hold L3 + R3 + ZL (0.8s) : Toggle BSS RAM Overlay\n";
+    tomlContent += "#   - Click L3 (in BSS Gaps)   : Rescan RAM\n";
+    tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
+    tomlContent += "# [ FREECAM ]\n";
+    tomlContent += "#   - L + R + Minus            : Toggle Freecam\n";
+    tomlContent += "#   - D-Pad                    : Move Forward / Back / Left / Right\n";
+    tomlContent += "#   - RStick                   : Rotate Camera (Yaw / Pitch)\n";
+    tomlContent += "#   - Click R3                 : Turbo move speed\n";
+    tomlContent += "#   - X / B                    : Up / Down (Elevation)\n";
+    tomlContent += "#   - L / R                    : Zoom FOV\n";
+    tomlContent += "#   - Hold Y + (L / R)         : Roll Camera (Tilt)\n";
+    tomlContent += "# [ DEBUG MODE ]\n";
+    tomlContent += "#   - L + R + Plus             : Toggle Debug Mode\n";
+    tomlContent += "#   - L + R + D-Pad Down       : State -> DATA_TEST\n";
+    tomlContent += "#   - L + R + D-Pad Up         : State -> TEST_MODE\n";
+    tomlContent += "#   - L + R + D-Pad Right      : State -> MENU_SWITCH\n";
+    tomlContent += "#   - L + R + D-Pad Left       : State -> CS_MENU\n";
+    tomlContent += "#   - Click L3                 : Toggle Engine Mouse (LStick+Y: Move, ZL/ZR: Clicks)\n";
+    tomlContent += "#   - Hold R3 + D-Pad Up/Down  : Select Debug Scene (Press A to load)\n\n";
+
     tomlContent += "[leftover]\n";
     tomlContent += "# Master toggle for FT UI (its dead so dont enable it)\n";
     tomlContent += "ft_ui = " + std::string(Config::enableFtUi ? "true" : "false") + "\n";
@@ -311,6 +342,7 @@ bool Config::init() {
             forceJapanese = config["gameplay"]["force_japanese"].value_or(false);
             forceFtUI = config["gameplay"]["force_ft_ui"].value_or(false);
             ExPatch = config["gameplay"]["ExPatch"].value_or(true);
+            enableTouch = config["gameplay"]["enable_touch"].value_or(false);
             enableKeyboard = config["gameplay"]["enable_keyboard"].value_or(false);
 
             nn::hid::g_keyboardModeEnabled = enableKeyboard;
