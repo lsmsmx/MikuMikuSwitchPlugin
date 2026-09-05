@@ -311,7 +311,7 @@ HOOK_DEFINE_TRAMPOLINE(ParseTargetsHook) {
 			int32_t i = 0;
 
 			if (dsc_buf[0] >= 0x10000000) {
-				// Skip header to find first TIME opcode
+				// Search for standard TIME opcode with time = 0
 				bool found_start = false;
 				for (int k = 1; k < 50; k++) {
 					if (dsc_buf[k] == 1 && dsc_buf[k+1] == 0) {
@@ -321,8 +321,18 @@ HOOK_DEFINE_TRAMPOLINE(ParseTargetsHook) {
 					}
 				}
 
+				// Fallback for charts starting with non-zero/negative timestamps
 				if (!found_start) {
-					i = 10;
+					for (int k = 1; k < 50; k++) {
+						if (dsc_buf[k] == 1) {
+							i = k;
+							found_start = true;
+							break;
+						}
+					}
+					if (!found_start) {
+						i = 1;
+					}
 				}
 			}
 
@@ -368,6 +378,10 @@ HOOK_DEFINE_TRAMPOLINE(ParseTargetsHook) {
 				auto* info = dsc::GetOpcodeInfo(opcode);
 				if (info != nullptr) {
 					i += info->length + 1;
+				}
+				else {
+					// Stop parsing on invalid/unknown opcode to prevent infinite freeze
+					break;
 				}
 			}
 		}
