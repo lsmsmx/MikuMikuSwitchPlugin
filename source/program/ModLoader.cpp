@@ -70,7 +70,7 @@ HOOK_DEFINE_TRAMPOLINE(InitRomDirectoryPathsHook) {
 };
 
 void ModLoader::init() {
-    if (Config::modsDirectoryPath.empty()) return;
+    if (!Config::enableMods || Config::modsDirectoryPath.empty()) return;
 
     // 1. Process mods based on the synchronized priority list
     for (const auto& modName : Config::priorityPaths) {

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 struct Config {
+    static bool enableMods;
     static bool enableDebug;
     static std::string modsDirectoryPath;
     static std::vector<std::string> priorityPaths;

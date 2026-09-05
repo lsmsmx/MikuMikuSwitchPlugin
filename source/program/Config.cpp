@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+
+bool Config::enableMods = true;
 bool Config::enableDebug = false;
 std::string Config::modsDirectoryPath = "";
 std::vector<std::string> Config::priorityPaths;
@@ -104,7 +106,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# MikuMikuSwitchPlugin - Global Configuration\n";
     tomlContent += "# Author: lsmsmx\n";
     tomlContent += "# =========================================================\n\n";
-    tomlContent += "enabled = true\n";
+    tomlContent += "mods = " + std::string(Config::enableMods ? "true" : "false") +"\n";
     tomlContent += "debug = " + std::string(Config::enableDebug ? "true" : "false") + "\n\n";
     tomlContent += "# Priority list (Top is highest priority).\n";
     tomlContent += "# New mods found on SD are automatically appended here.\n";
@@ -319,15 +321,15 @@ bool Config::init() {
         auto result = toml::parse(content);
         if (result) {
             auto config = std::move(result).table();
-
-            if (!config["enabled"].value_or(true)) return false;
-
+            enableMods = config["mods"].value_or(true);
             enableDebug = config["debug"].value_or(false);
 
-            if (auto pArr = config["priority"].as_array()) {
-                for (auto&& el : *pArr) {
-                    if (auto val = el.value<std::string>()) {
-                        if (!val->empty()) priorityPaths.push_back(*val);
+            if (enableMods) {
+                if (auto pArr = config["priority"].as_array()) {
+                    for (auto&& el : *pArr) {
+                        if (auto val = el.value<std::string>()) {
+                            if (!val->empty()) priorityPaths.push_back(*val);
+                        }
                     }
                 }
             }
@@ -423,52 +425,53 @@ bool Config::init() {
         }
     }
 
-    // Scan SD card for mods
-    std::vector<std::string> modsOnDisk;
-    if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, modsDirectoryPath.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
-        int64_t count = 0;
-        nn::fs::DirectoryEntry entry;
-        while (R_SUCCEEDED(nn::fs::ReadDirectory(&count, &entry, dh, 1)) && count > 0) {
-
-            // 1. Hardware Switch and Yuzu check (offset 0x301)
-            bool isDir = ((int)entry.m_Type == (int)nn::fs::DirectoryEntryType_Directory);
-
-            // 2. Ryujinx check (offset 0x304)
-            uint8_t* rawBytes = reinterpret_cast<uint8_t*>(&entry);
-            if (!isDir && rawBytes[0x304] == (uint8_t)nn::fs::DirectoryEntryType_Directory) {
-                isDir = true;
-            }
-
-            // If it is a directory on any supported platform, append to list
-            if (isDir) {
-                modsOnDisk.push_back(entry.m_Name);
-            }
-        }
-        nn::fs::CloseDirectory(dh);
-    }
-    std::sort(modsOnDisk.begin(), modsOnDisk.end());
-
     bool configChanged = !configExists;
 
-    std::set<std::string> currentDiskSet(modsOnDisk.begin(), modsOnDisk.end());
-    auto it = priorityPaths.begin();
-    while (it != priorityPaths.end()) {
-        if (currentDiskSet.find(*it) == currentDiskSet.end()) {
-            it = priorityPaths.erase(it);
-            configChanged = true;
-        } else {
-            ++it;
+    if(enableMods) {
+        // Scan SD card for mods
+        std::vector<std::string> modsOnDisk;
+        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, modsDirectoryPath.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
+            int64_t count = 0;
+            nn::fs::DirectoryEntry entry;
+            while (R_SUCCEEDED(nn::fs::ReadDirectory(&count, &entry, dh, 1)) && count > 0) {
+
+                // 1. Hardware Switch and Yuzu check (offset 0x301)
+                bool isDir = ((int)entry.m_Type == (int)nn::fs::DirectoryEntryType_Directory);
+
+                // 2. Ryujinx check (offset 0x304)
+                uint8_t* rawBytes = reinterpret_cast<uint8_t*>(&entry);
+                if (!isDir && rawBytes[0x304] == (uint8_t)nn::fs::DirectoryEntryType_Directory) {
+                    isDir = true;
+                }
+
+                // If it is a directory on any supported platform, append to list
+                if (isDir) {
+                    modsOnDisk.push_back(entry.m_Name);
+                }
+            }
+            nn::fs::CloseDirectory(dh);
+        }
+        std::sort(modsOnDisk.begin(), modsOnDisk.end());
+
+        std::set<std::string> currentDiskSet(modsOnDisk.begin(), modsOnDisk.end());
+        auto it = priorityPaths.begin();
+        while (it != priorityPaths.end()) {
+            if (currentDiskSet.find(*it) == currentDiskSet.end()) {
+                it = priorityPaths.erase(it);
+                configChanged = true;
+            } else {
+                ++it;
+            }
+        }
+
+        std::set<std::string> currentPrioritySet(priorityPaths.begin(), priorityPaths.end());
+        for (const auto& modName : modsOnDisk) {
+            if (currentPrioritySet.find(modName) == currentPrioritySet.end()) {
+                priorityPaths.push_back(modName);
+                configChanged = true;
+            }
         }
     }
-
-    std::set<std::string> currentPrioritySet(priorityPaths.begin(), priorityPaths.end());
-    for (const auto& modName : modsOnDisk) {
-        if (currentPrioritySet.find(modName) == currentPrioritySet.end()) {
-            priorityPaths.push_back(modName);
-            configChanged = true;
-        }
-    }
-
     if (configChanged) {
         SaveConfig(configPath);
     }

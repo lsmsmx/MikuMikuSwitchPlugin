@@ -30,6 +30,7 @@ I plan to port most cool hook based pacthes made for Project Diva Megamix+ for P
 - Saturation patch for my friend
 - AetDB fix port to prevent unnecessary memory allocations
 - SpriteDrawLimit memory allocations fix port for debug mode
+- Opd generation, light_param save and load through debug
 - Bone Control through ImGUI
 - Record/Play recorded motions through ImGUI
 - Input Track Overlay through ImGUI
