@@ -21,7 +21,10 @@ I plan to port most cool hook based pacthes made for Project Diva Megamix+ for P
 - Increased Limit Of Spritesets to be loaded from 4096 to 32768
 - Subsurface Scattering restoration
 - FXAA and forced toon removed in customization menu.
-- No Module, COS limits
+- No Module, COS limit
+- Touch to mouse, touch to flicks for pv game
+- Keyboard mode
+- Opd generation, light_param save and load through debug
 - Aet effects limit increased from 83 to 256
 - Huge full implementation of str_array code injection to make modules to work properly without crashing the game, since simple patches wasn't enough. Custom hairs work too!
 - Increased limit of lyric entries from 150 to 1000 in pv_db
@@ -30,12 +33,11 @@ I plan to port most cool hook based pacthes made for Project Diva Megamix+ for P
 - Saturation patch for my friend
 - AetDB fix port to prevent unnecessary memory allocations
 - SpriteDrawLimit memory allocations fix port for debug mode
-- Opd generation, light_param save and load through debug
 - Bone Control through ImGUI
 - Record/Play recorded motions through ImGUI
 - Input Track Overlay through ImGUI
 - State Switcher through ImGUI
-- Keyboard mode
+- .bss free memory overlay through ImGUI
 
 # Instructions
 - External save file (for NC too) is located in sdmc:/MikuMikuSwitchPlugin/Save/
@@ -43,7 +45,7 @@ I plan to port most cool hook based pacthes made for Project Diva Megamix+ for P
 - Drop your mods in sdmc:/atmosphere/contents/TitleID/romfs/mods (just to make sure, you still have to convert and rename in pv_db usm->mp4)
 - Config file location is sdmc:/MikuMikuSwitchPlugin/config.toml
 - Motion dumps in sdmc:/MikuMikuSwitchPlugin/Dump/*.txt
-
+- Disable mods by putting `mods = false`
 
 -------------------------------------------------------------------------------------------------------------------------
 
@@ -78,9 +80,9 @@ Hotkeys:
 **Debug Mode**
 - (L + R + Plus) — Enable/Disable Debug Mode
 - (L3) — Toggle Mouse
-- (Left stick) — Mouse control
-- (ZL) — Left Mouse Click
-- (ZR) — Right Mouse Click
+- (Left stick) or Sensor — Mouse control
+- (ZL) or One finger tap — Left Mouse Click
+- (ZR) or Two fingers tap — Right Mouse Click
 - (Y_Hold) — Mouse movement speed boost
 - (L + R + D-Pad_Up) — Fast travel to Test Mode State
 - (L + R + D-Pad_Down) — Fast travel to Data Test State
@@ -99,17 +101,19 @@ Hotkeys:
 -------------------------------------------------------------------------------------------------------------------------
 
 
-ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher:
+ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher, .bss:
 
-- ImGui interface can be toggled by pressing "+" & "-" for 2 seconds
+- ImGui interface can be toggled by pressing "+" & "-" for second
 - InputOverlay can be toggled and changed (2 modes: keyboard and joycons)
 - The controls are pretty much the same as in debug, including a mouse movement speed increase by holding Y button
-- To start recording, reset and freeze motion (for example using "MOTION TEST" window and selecting "STEP"), then click "Arm Recording", then get back to in-game debug motion window and start playing anim set, as it starts recording it. Its not hard to pose body on your own except of face.
-- You can load as many recorded anims as you want at the same time but it may break the physics lol so use it with caution. Click "Open Ultimate Motion Player" to select and play motion you recorded (you can rename motions txt files), you can delete the slot or add new one, and of course you can use slider to go between frames.  Don't forget to check and uncheck the check mark.
-- Motion Control tab offers you a variety of stuff but mostly it's: select a current bone use sliders to rotate and move, there are no specific ways to tell what each index does, it's basically hooking bone matrix update func, but at least i had enough courage to include some useful information about bones.
+- To start recording, reset and freeze motion (for example using "MOTION TEST" window and selecting "STEP"), then click "Arm Recording", then get back to in-game debug motion window and start playing anim set, as it starts recording it. Its not hard to pose body on your own except of face
+- You can load as many recorded anims as you want at the same time but it may break the physics lol so use it with caution. Click "Open Ultimate Motion Player" to select and play motion you recorded (you can rename motions txt files), you can delete the slot or add new one, and of course you can use slider to go between frames.  Don't forget to check and uncheck the check mark
+- Motion Control tab offers you a variety of stuff but mostly it's: select a current bone use sliders to rotate and move, there are no specific ways to tell what each index does, it's basically hooking bone matrix update func, but at least i had enough courage to include some useful information about bones
 - Toggling Input Overlay will open a new imgui window that is tied to centered bottom of screen, no user interaction, slight transparency. Tracks all your inputs. Useful for people who records videos. Will look like Nintendo Switch Grip for Joycons. Or if you play keyboard it will use overlay it
 - Mouth Focus Switch by holding ZR + ZL buttons for 0.5 seconds for quick switch between in-game debug and imgui window
-- Change Substates within the menu.
+- Change Substates within the menu
+- .bss free RAM overlay with update button, enable with pressing L3+R3+ZL for a second. Update with L3 while in menu
+- Touch Control available
 
 -------------------------------------------------------------------------------------------------------------------------
 
@@ -197,4 +201,4 @@ const char *possible_tids[] = {
 -------------------------------------------------------------------------------------------------------------------------
 
 # Config
-- It allows you to customize graphics, gameplay, adjust and enjoy best way possible!
+- It allows you to customize graphics, gameplay, adjust and enjoy best way possible. So remember to check the config to understand what's going on there
