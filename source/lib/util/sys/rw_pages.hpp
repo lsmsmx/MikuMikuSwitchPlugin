@@ -23,6 +23,7 @@ namespace exl::util {
                     return ALIGN_DOWN(m_Rw, PAGE_SIZE);
                 }
 
+                // fix for hooks at the last 16 bytes of memory page
                 constexpr size_t GetAlignedSize() const {
                     return ALIGN_UP((m_Ro - GetAlignedRo()) + m_Size, PAGE_SIZE);
                 }

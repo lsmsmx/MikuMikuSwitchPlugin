@@ -97,36 +97,28 @@ inline FUNCTION_PTR(bool, __fastcall, PollRepeatTapInput, 0x1fc420, RepeatTapMem
 
 ButtonState::StateData& ButtonState::Push(const std::chrono::steady_clock::time_point& time)
 {
-	if (!data.empty())
-	{
-		auto searchResult = std::lower_bound(
-			data.begin(),
-			data.end(),
-			(time - std::chrono::milliseconds(500)),
-			[](auto& lhs, auto& rhs) { return lhs.time > rhs; });
-
-		data.erase(searchResult, data.end());
+	size_t to_move = count < HISTORY_CAP ? count : (HISTORY_CAP - 1);
+	for (size_t i = to_move; i > 0; i--) {
+		data[i] = data[i - 1];
 	}
 
-	do
-	{
-		data.insert(data.begin(), StateData{false, false, false, false, time});
-	} while (data.size() < 2);
+	data[0] = StateData{false, false, false, false, time};
+	if (count < HISTORY_CAP) count++;
 
 	return data[0];
 }
 
 bool ButtonState::IsTappedInNearFrames() const
 {
-	for (auto& state : data)
+	if (count == 0) return false;
+	for (size_t i = 0; i < count; i++)
 	{
-		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - state.time).count() > 200)
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - data[i].time).count() > 200)
 			return false;
 
-		if (state.tapped)
+		if (data[i].tapped)
 			return true;
 	}
-
 	return false;
 }
 

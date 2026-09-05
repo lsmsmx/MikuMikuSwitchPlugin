@@ -329,29 +329,10 @@ HOOK_DEFINE_TRAMPOLINE(UpdateTargetsHook) {
 				}
 				else if (tgt->IsLongNoteStart() && tgt->holding)
 				{
-					bool is_in_zone = false;
-					if (tgt->next && tgt->next->org)
-					{
-						float time = tgt->next->org->flying_time_remaining;
-						is_in_zone = (time >= data->sad_late_window && time <= data->sad_early_window);
-					}
-
-					float time_to_tail = (tgt->next && tgt->next->org) ? tgt->next->org->flying_time_remaining : 999.0f;
-					bool in_tail_judgment = (time_to_tail <= (data->sad_early_window + 0.05f));
-
-					if (!nc::CheckLongNoteHolding(tgt) && !is_in_zone && !in_tail_judgment)
-					{
-						tgt->holding = false;
-						tgt->StopAet();
-						se_mgr.EndLongSE(true);
-						GetPVGameData()->ui.RemoveBonusText();
-						if (tgt->next)
-							tgt->next->force_hit_state = HitState_Worst;
-						continue;
-					}
-
 					UpdateLongNoteKiseki(data, tgt, dt);
 				}
+
+				// NOTE: Update rush / long note length and timer
 				if (tgt->IsLongNoteStart() && tgt->holding)
 				{
 					tgt->length_remaining = fmaxf(tgt->length_remaining - dt, 0.0f);

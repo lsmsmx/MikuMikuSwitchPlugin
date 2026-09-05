@@ -47,14 +47,16 @@ struct ButtonState
 		std::chrono::steady_clock::time_point time;
 	};
 
-	std::vector<StateData> data;
+	static constexpr size_t HISTORY_CAP = 32;
+	std::array<StateData, HISTORY_CAP> data{};
+	size_t count = 0;
 
 	StateData& Push(const std::chrono::steady_clock::time_point& time);
 
-	inline bool IsDown() const { return !data.empty() && data[0].down; }
-	inline bool IsTapped() const { return !data.empty() && data[0].tapped; }
-	inline bool IsUp() const { return !data.empty() && data[0].up; }
-	inline bool IsReleased() const { return !data.empty() && data[0].released; }
+	inline bool IsDown() const { return count > 0 && data[0].down; }
+	inline bool IsTapped() const { return count > 0 && data[0].tapped; }
+	inline bool IsUp() const { return count > 0 && data[0].up; }
+	inline bool IsReleased() const { return count > 0 && data[0].released; }
 	bool IsTappedInNearFrames() const;
 };
 

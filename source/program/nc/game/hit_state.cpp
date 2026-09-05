@@ -111,16 +111,28 @@ namespace nc
 		if (target->flying_time_remaining < -NormalWindow[HitState_Sad])
 			return HitState_Worst;
 
+		// Note Queue Protection:
+		// Do not process this target if any previous sequential note is still unhit.
+		for (PvGameTarget* p = target->prev; p != nullptr; p = p->prev)
+		{
+			if (p->multi_count < 0 || p->multi_count != target->multi_count)
+			{
+				if (p->hit_state == HitState_None)
+					return HitState_None;
+			}
+		}
+
 		bool hit = false;
 		bool wrong = false;
 		auto [button_mask, wrong_mask] = GetButtonBitmasksAccountedForMultis(target);
 
+		// Double Notes (W-notes)
 		if (target->target_type >= TargetType_UpW && target->target_type <= TargetType_LeftW)
 		{
 			ButtonState& face = macro_state.buttons[Button_Triangle + (target->target_type - TargetType_UpW)];
 			ButtonState& arrow = macro_state.buttons[Button_Up + (target->target_type - TargetType_UpW)];
 
-			if (fabs(target->flying_time_remaining) <= NormalWindow[HitState_Fine])
+			if (fabs(target->flying_time_remaining) <= NormalWindow[HitState_Sad])
 			{
 				bool wrong_pressed = (macro_state.GetTappedBitfield() & wrong_mask) != 0;
 
@@ -128,7 +140,8 @@ namespace nc
 				{
 					hit = true;
 					wrong = false;
-					*double_tapped = true;
+					*double_tapped = (face.IsTapped() && arrow.IsTappedInNearFrames()) ||
+					                 (arrow.IsTapped() && face.IsTappedInNearFrames());
 				}
 				else if (wrong_pressed)
 				{
@@ -137,8 +150,7 @@ namespace nc
 				}
 			}
 		}
-
-
+		// Long Notes
 		else if (target->target_type >= TargetType_TriangleLong && target->target_type <= TargetType_SquareLong)
 		{
 			int32_t offset = target->target_type - TargetType_TriangleLong;
@@ -147,7 +159,6 @@ namespace nc
 
 			if (!ex->long_end)
 			{
-
 				if (face.IsTapped() || arrow.IsTapped())
 				{
 					hit = true;
@@ -162,7 +173,6 @@ namespace nc
 			}
 			else
 			{
-
 				bool face_down = face.IsDown() || macro_state.IsRawDown(Button_Triangle + offset);
 				bool arrow_down = arrow.IsDown() || macro_state.IsRawDown(Button_Up + offset);
 				bool is_holding_now = face_down || arrow_down;
@@ -177,17 +187,19 @@ namespace nc
 				}
 			}
 		}
-
+		// Star Notes
 		else if (ex->IsStarLikeNote())
 		{
 			hit = macro_state.GetStarHit();
 			if (target->target_type == TargetType_ChanceStar)
 				*no_success = macro_state.GetStarHitCancel();
 		}
+		// Double Star Notes
 		else if (target->target_type == TargetType_StarW)
 		{
 			hit = macro_state.GetDoubleStarHit();
 		}
+		// Rush Notes
 		else if (ex->IsRushNote())
 		{
 			if ((macro_state.GetTappedBitfield() & button_mask) != 0)

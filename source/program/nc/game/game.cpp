@@ -175,16 +175,42 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 				disp_count++;
 			};
 
-			for (auto it = state.target_references.begin(); it != state.target_references.end(); it++)
+			for (auto it = state.target_references.begin(); it != state.target_references.end();)
 			{
 				TargetStateEx* tgt = *it;
 
+				// NOTE: Poll input for ongoing long notes
 				if (tgt->IsLongNoteStart() && tgt->holding)
 				{
+					bool is_in_zone = false;
+
+					// NOTE: Check if the end target is in it's timing window
+					if (tgt->next && tgt->next->org != nullptr)
+					{
+						float time = tgt->next->org->flying_time_remaining;
+						is_in_zone = time >= game->sad_late_window && time <= game->sad_early_window;
+					}
+
 					se_mgr.TickLongSE();
 					score::CalculateSustainBonus(tgt);
 					addTargetScoreDisp(tgt);
+
+					// NOTE: Check if the start target button has been released;
+					//       if the end note is not inside its timing zone,
+					//       automatically mark it as a fail.
+					if (!nc::CheckLongNoteHolding(tgt) && !is_in_zone)
+					{
+						if (tgt->next)
+							tgt->next->force_hit_state = HitState_Worst;
+						tgt->StopAet();
+						tgt->holding = false;
+						it = state.target_references.erase(it);
+						se_mgr.EndLongSE(true);
+						GetPVGameData()->ui.RemoveBonusText();
+						continue;
+					}
 				}
+				// NOTE: Poll input for ongoing rush notes
 				else if (tgt->IsRushNote() && tgt->holding)
 				{
 					if (nc::CheckRushNotePops(tgt))
@@ -201,6 +227,8 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 						}
 					}
 				}
+
+				it++;
 			}
 
 			if (disp_score > 0 && disp_count > 0)
