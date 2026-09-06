@@ -15,6 +15,46 @@ bool IsVisible() { return g_overlayMode != Mode_Disabled; }
 void SetVisible(bool state) { g_overlayMode = state ? Mode_Gamepad : Mode_Disabled; }
 
 // =========================================================
+// Full-Screen Touch to Mini-Zone Circle Projection
+// =========================================================
+static void DrawProjectedTouchSwipes(ImDrawList* draw) {
+    if (!nn::hid::GetTouchScreenState) return;
+
+    // Mini-zone at bottom-center: 1280/3 x 720/3 (426.66px x 240.0px)
+    const float zoneW = 1280.0f / 3.0f;
+    const float zoneH = 720.0f / 3.0f;
+    const float zoneX = (1280.0f - zoneW) * 0.5f;
+    const float zoneY = 720.0f - zoneH;
+
+    // Map full-screen coordinates (0..1280, 0..720) down into the bottom-center 1/3 window
+    auto ProjectToMiniZone = [&](float sx, float sy) -> ImVec2 {
+        float px = zoneX + (sx / 1280.0f) * zoneW;
+        float py = zoneY + (sy / 720.0f) * zoneH;
+        return ImVec2(px, py);
+    };
+
+    nn::hid::TouchScreenState ts = {};
+    nn::hid::GetTouchScreenState(&ts);
+
+    // Exact 12px radius requested
+    const float circleRadius = 12.0f;
+
+    // Miku Teal (#47DFD3) outline from ImGui theme
+    const ImU32 mikuBorderCol = IM_COL32(71, 223, 211, 220);
+    const ImU32 fillCol       = IM_COL32(245, 248, 250, 140);
+
+    for (int i = 0; i < ts.count; i++) {
+        ImVec2 mappedPos = ProjectToMiniZone((float)ts.touches[i].x, (float)ts.touches[i].y);
+
+        // Soft translucent white/light-gray core
+        draw->AddCircleFilled(mappedPos, circleRadius, fillCol);
+
+        // Signature Miku Teal border (#47DFD3)
+        draw->AddCircle(mappedPos, circleRadius, mikuBorderCol, 0, 2.0f);
+    }
+}
+
+// =========================================================
 // 1. Gamepad Rendering (Switch Joy-Con)
 // =========================================================
 void DrawGamepad() {
@@ -39,7 +79,23 @@ void DrawGamepad() {
         nn::hid::NpadHandheldState npad = nn::hid::GetMergedNpadState();
         uint64_t btns = npad.buttons;
 
-        // Colors
+        // Detect if touch emulation is actively occurring per side
+        bool isTouchActiveL = false;
+        bool isTouchActiveR = false;
+
+        if (nn::hid::GetTouchScreenState) {
+            nn::hid::TouchScreenState ts = {};
+            nn::hid::GetTouchScreenState(&ts);
+            for (int i = 0; i < ts.count; i++) {
+                if (ts.touches[i].x < 640) {
+                    isTouchActiveL = true;
+                } else {
+                    isTouchActiveR = true;
+                }
+            }
+        }
+
+        // Color palette
         ImU32 alphaGlo  = 225;
         ImU32 alphaBtn  = 220;
         ImU32 alphaLogo = 150;
@@ -56,7 +112,7 @@ void DrawGamepad() {
         ImU32 colBlue  = IM_COL32(140, 180, 255, alphaBtn);
         ImU32 colPink  = IM_COL32(240, 100, 200, alphaBtn);
 
-        // Shell Coordinates
+        // Shell coordinates
         float jcW     = s(44.0f);
         float centerW = s(58.0f);
         float gripW   = centerW / 2.0f;
@@ -74,7 +130,7 @@ void DrawGamepad() {
 
         ImGui::Dummy(ImVec2(s(280.0f), (leftBottomGroupY + s(15.0f)) - pos.y));
 
-        // ZL/ZR Triggers
+        // ZL / ZR Triggers
         float zc = s(2.5f);
         draw->PathClear();
         draw->PathArcTo(ImVec2(leftX + s(7.0f), topY - s(13.0f)), zc, IM_PI, IM_PI * 1.5f, 5);
@@ -90,7 +146,7 @@ void DrawGamepad() {
         draw->PathArcTo(ImVec2(cx + gripW + s(13.0f), topY - s(7.0f)), zc, IM_PI * 0.5f, IM_PI, 5);
         draw->PathFillConvex((btns & nn::hid::Button::ZR) ? colBtnPrs : colBtnBase);
 
-        // L/R Bumpers
+        // L / R Bumpers
         float bThick = s(3.5f);
         float flushOff = bThick / 2.0f;
         draw->PathClear();
@@ -103,7 +159,7 @@ void DrawGamepad() {
         draw->PathArcTo(ImVec2(rightX + jcW - jcRad, topY + jcRad), jcRad + flushOff, IM_PI * 1.5f, IM_PI * 1.8f, 15);
         draw->PathStroke((btns & nn::hid::Button::R) ? colBtnPrs : colBtnBase, 0, bThick);
 
-        // Main Body
+        // Main Body Shells
         draw->AddRectFilled(ImVec2(cx - gripW, topY), ImVec2(cx + gripW, bodyBottomY), colMiddle);
         draw->AddRectFilled(ImVec2(leftX, topY), ImVec2(cx - gripW, bodyBottomY), colLeft, jcRad, ImDrawFlags_RoundCornersTopLeft);
         draw->AddRectFilled(ImVec2(rightX, topY), ImVec2(rightX + jcW, bodyBottomY), colRight, jcRad, ImDrawFlags_RoundCornersTopRight);
@@ -146,11 +202,11 @@ void DrawGamepad() {
         draw->AddCircleFilled(ImVec2(dotLeftX, ly - dotOffsetY), dotRad, colLogo);
         draw->AddCircleFilled(ImVec2(dotRightX, ly + dotOffsetY), dotRad, IM_COL32(0, 0, 0, alphaGlo));
 
-        // Player LEDs
+        // Player Indicator LEDs
         ImU32 ledOn = IM_COL32(50, 255, 50, alphaGlo);
         ImU32 ledOff = IM_COL32(20, 50, 20, 130);
         float indRad = s(1.2f), indGap = s(3.5f), startIndY = ly - (indGap * 1.5f);
-        for(int i=0; i<4; i++) {
+        for (int i = 0; i < 4; i++) {
             draw->AddCircleFilled(ImVec2(cx - gripW + s(6.0f), startIndY + i*indGap), indRad, (i == 0) ? ledOn : ledOff);
             draw->AddCircleFilled(ImVec2(cx + gripW - s(6.0f), startIndY + i*indGap), indRad, (i == 0) ? ledOn : ledOff);
         }
@@ -195,7 +251,7 @@ void DrawGamepad() {
         DrawWord("NINTENDO", cx - s(20.0f), cx + s(20.0f), ly + s(17.0f), s(3.5f), s(1.0f));
         DrawWord("SWITCH", cx - s(20.0f), cx + s(20.0f), ly + s(23.0f), s(7.0f), s(1.8f));
 
-        // Buttons and Thumbsticks
+        // D-Pad and Buttons
         auto DrawSwitchDPad = [&](ImVec2 c, float offset, int dir, uint64_t mask) {
             bool pressed = (btns & mask) != 0;
             ImVec2 btnC = (dir==0)?ImVec2(c.x,c.y-offset):(dir==1)?ImVec2(c.x,c.y+offset):(dir==2)?ImVec2(c.x-offset,c.y):ImVec2(c.x+offset,c.y);
@@ -228,6 +284,7 @@ void DrawGamepad() {
         DrawPSBtn(ImVec2(rcx - s(12.5f), rightTopGroupY), nn::hid::Button::Y, 2, colPink);
         DrawPSBtn(ImVec2(rcx + s(12.5f), rightTopGroupY), nn::hid::Button::A, 1, colRed);
 
+        // Analog Sticks: ignore touch slider injection so sticks only move on real physical stick input
         auto DrawStick = [&](float sx, float sy, int32_t stickX, int32_t stickY, uint64_t clickMask) {
             float nx = (float)stickX/32768.0f, ny = -(float)stickY/32768.0f;
             float d = std::sqrt(nx*nx+ny*ny); if(d>1.0f){nx/=d;ny/=d;}
@@ -236,10 +293,16 @@ void DrawGamepad() {
             draw->AddCircleFilled(head, s(7.5f), (btns&clickMask)?colBtnPrs:colBtnBase);
             draw->AddCircle(head, s(7.5f), IM_COL32(60,60,60,alphaBtn), 0, s(1.2f));
         };
-        DrawStick(lcx, leftTopGroupY, npad.analogStickL[0], npad.analogStickL[1], nn::hid::Button::LStick);
-        DrawStick(rcx, rightBottomGroupY, npad.analogStickR[0], npad.analogStickR[1], nn::hid::Button::RStick);
 
-        // +/- Buttons
+        int32_t stickLX = isTouchActiveL ? 0 : npad.analogStickL[0];
+        int32_t stickLY = isTouchActiveL ? 0 : npad.analogStickL[1];
+        int32_t stickRX = isTouchActiveR ? 0 : npad.analogStickR[0];
+        int32_t stickRY = isTouchActiveR ? 0 : npad.analogStickR[1];
+
+        DrawStick(lcx, leftTopGroupY, stickLX, stickLY, nn::hid::Button::LStick);
+        DrawStick(rcx, rightBottomGroupY, stickRX, stickRY, nn::hid::Button::RStick);
+
+        // +/- System Buttons
         float pmCenterY = topY + s(7.0f);
         float pmHalfLen = s(4.5f);
         float pmHalfThick = s(1.25f);
@@ -277,6 +340,10 @@ void DrawGamepad() {
         );
 
         draw->Flags = backup_flags;
+
+        // Render clean 12px touch circles with Miku teal border
+        DrawProjectedTouchSwipes(draw);
+
         draw->PopClipRect();
     }
     ImGui::End();
@@ -350,7 +417,7 @@ void DrawKeyboard() {
 }
 
 // =========================================================
-// Main Render Method
+// Main Render Entrypoint
 // =========================================================
 void Draw() {
     if (g_overlayMode == Mode_Gamepad) {
@@ -360,4 +427,4 @@ void Draw() {
     }
 }
 
-}
+} // namespace InputOverlay
