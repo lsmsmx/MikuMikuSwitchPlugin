@@ -57,7 +57,7 @@ std::string Config::magFilterMode = "default";
 std::string Config::ssaaMode = "off";
 float Config::shadowIntensity = 1.0f;
 float Config::reflectionQuality = 1.0f;
-float Config::exposure = 1.0f;
+float Config::exposure = -1.0f;
 float Config::gamma = -1.0f;
 float Config::fxaaQualitySubpix = -1.0f;
 float Config::fxaaQualityEdgeThreshold = -1.0f;
@@ -170,6 +170,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "star_control = " + std::to_string(Config::ncStarControl) + "\n\n";
 
     tomlContent += "[graphics]\n";
+    tomlContent += "# NOTE: for best looking graphics use dock/fakedock mode using ReverseNX + -no_npr in args.txt\n";
     tomlContent += "# Disables ADP (Adaptive Performance) system completely\n";
     tomlContent += "disable_adp = " + std::string(Config::disableAdp ? "true" : "false") + "\n";
     tomlContent += "# Enable Subsurface Scattering (SSS) for Future Tone style graphics\n";
@@ -190,7 +191,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# Forces Future Tone Mode extra patches to get maximumly close to MM+ \n";
     tomlContent += "extraFtGraphics = " + std::string(Config::extraFtGraphics ? "true" : "false") + "\n";
 
-    tomlContent += "# Exposure value multiplier: 0.0 to 4.0 (Default 1.0)\n";
+    tomlContent += "# Exposure value multiplier: 0.0 to 4.0 (Default -1.0)\n";
     tomlContent += "exposure = " + std::to_string(Config::exposure) + "\n";
     tomlContent += "# Gamma correction: 0.0 to 1.0 (Set to -1.0 for game default)\n";
     tomlContent += "gamma = " + std::to_string(Config::gamma) + "\n";
@@ -250,6 +251,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "#   - ZL / ZR                  : Left Click / Right Click\n";
     tomlContent += "#   - Hold L3 + R3 (0.8s)      : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
     tomlContent += "#   - Hold L3 + R3 + ZL (0.8s) : Toggle BSS RAM Overlay\n";
+    tomlContent += "#   - Hold L3 + R3 + ZR (0.8s) : Toggle Resolution Scaler Overlay\n";
     tomlContent += "#   - Click L3 (in BSS Gaps)   : Rescan RAM\n";
     tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
     tomlContent += "# [ FREECAM ]\n";
@@ -376,7 +378,7 @@ bool Config::init() {
             enableSss = config["graphics"]["enable_sss"].value_or(false);
             cstmMenuFtStyle = config["graphics"]["cstm_menu_ft_style"].value_or(false);
             ssaaMode = config["graphics"]["ssaa_mode"].value_or("off");
-            exposure = (float)config["graphics"]["exposure"].value_or(1.0f);
+            exposure = (float)config["graphics"]["exposure"].value_or(-1.0f);
             gamma = (float)config["graphics"]["gamma"].value_or(-1.0f);
             fxaaQualitySubpix = (float)config["graphics"]["fxaa_subpix"].value_or(-1.0f);
             fxaaQualityEdgeThreshold = (float)config["graphics"]["fxaa_edge_threshold"].value_or(-1.0f);
@@ -421,7 +423,7 @@ bool Config::init() {
             refractW = (uint32_t)config["graphics"]["advanced"]["refract_w"].value_or(1024);
             refractH = (uint32_t)config["graphics"]["advanced"]["refract_h"].value_or(512);
 
-            enableFtUi = config["lefotver"]["ft_ui"].value_or(false);
+            enableFtUi = config["leftover"]["ft_ui"].value_or(false);
         }
     }
 
@@ -477,4 +479,5 @@ bool Config::init() {
     }
 
     return true;
+
 }

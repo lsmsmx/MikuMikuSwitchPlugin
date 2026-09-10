@@ -96,7 +96,7 @@ HOOK_DEFINE_TRAMPOLINE(SetGammaHook) {
 // 3. Exposure Setter (0x4a0130)
 HOOK_DEFINE_TRAMPOLINE(SetExposureHook) {
     static void Callback(float exposure, uintptr_t render_ptr) {
-        float target_exposure = (Config::exposure != 1.0f) ? Config::exposure : exposure;
+        float target_exposure = (Config::exposure != -1.0f) ? Config::exposure : exposure;
         Orig(target_exposure, render_ptr);
     }
 };
@@ -122,8 +122,10 @@ HOOK_DEFINE_TRAMPOLINE(SetFxaaParamsHook) {
 HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
     static uint64_t Callback() {
         uint64_t result = Orig();
+
         uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
         uintptr_t lvar1 = *(uintptr_t*)(base + 0x00cdf890);
+
         if (!lvar1) return result;
 
         uint32_t* adp_low  = (uint32_t*)(lvar1 + 0x65708f90);
@@ -134,7 +136,8 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
 
             // Apply fixed scaler only when ADP is disabled
             if (Config::resScaler != 1.0f) {
-                *(float*)(lvar1 + 0x6570907c) = Config::resScaler;
+                *(float*)(lvar1 + 0x6570907c) = Config::resScaler; // handheld
+                *(float*)(lvar1 + 0x65709088) = Config::resScaler; // docked
             }
             if (Config::shadowIntensity != 1.0f) {
                 *(float*)(lvar1 + 0x65709090) = Config::shadowIntensity;
@@ -156,6 +159,12 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
             }
         }
 
+
+        if (Config::force30fps) {
+            *adp_high |= 0x800;
+            *adp_high |= 0x1000;
+        }
+
         return result;
     }
 };
@@ -169,7 +178,7 @@ HOOK_DEFINE_TRAMPOLINE(GetReflectionQuality) {
             return Config::reflectionQuality;
         }
         else {
-            Orig();
+            return Orig();
         }
     }
 };
@@ -379,6 +388,80 @@ HOOK_DEFINE_TRAMPOLINE(MLAA_Pass3_Fix) {
     }
 };
 
+// =========================================================================
+// Future Tone Customization Menu Lighting
+// =========================================================================
+
+inline void* light_set_get_by_id(int32_t id) {
+    auto func = (void*(*)(int32_t))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x4082b0);
+    return func(id);
+}
+
+inline void light_set_type(void* light_set, int32_t type) {
+    auto func = (void(*)(void*, int32_t))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x4082d0);
+    func(light_set, type);
+}
+
+// NOTE: In ARM64, float arguments (s0-s3) and pointer arguments (x0) use separate registers.
+// Ghidra decompiles this with floats coming first, so we match that order exactly.
+inline void light_set_ambient(float r, float g, float b, float a, void* light_set) {
+    auto func = (void(*)(float, float, float, float, void*))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x4082f0);
+    func(r, g, b, a, light_set);
+}
+
+inline void light_set_diffuse(float r, float g, float b, float a, void* light_set) {
+    auto func = (void(*)(float, float, float, float, void*))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x408310);
+    func(r, g, b, a, light_set);
+}
+
+inline void light_set_specular(float r, float g, float b, float a, void* light_set) {
+    auto func = (void(*)(float, float, float, float, void*))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x408330);
+    func(r, g, b, a, light_set);
+}
+
+inline void light_set_position(float x, float y, float z, void* light_set) {
+    auto func = (void(*)(float, float, float, void*))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x408350);
+    func(x, y, z, light_set);
+}
+
+inline void* render_get() {
+    auto func = (void*(*)())(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x49bbc0);
+    return func();
+}
+
+// Float first, pointer second
+inline void render_set_exposure(float exposure, void* render) {
+    auto func = (void(*)(float, void*))(exl::util::GetMainModuleInfo().m_Total.m_Start + 0x4a0130);
+    func(exposure, render);
+}
+
+// Hook for the actual UI lighting setup function you found
+HOOK_DEFINE_TRAMPOLINE(CustomizeSetLightingInfoHook) {
+    static void Callback() {
+        Orig();
+
+        if (Config::cstmMenuFtStyle) {
+            void* set  = light_set_get_by_id(0); // LIGHT_SET_MAIN
+            void* rend = render_get();
+
+            if (set) {
+                // Overwrite with Arcade / Future Tone parameters
+                light_set_type(set, 1); // LIGHT_PARALLEL
+                light_set_position(-0.2f, 0.39272901f, 0.70158201f, set);
+
+                light_set_ambient(0.07f, 0.07f, 0.07f, 1.0f, set);
+                light_set_diffuse(0.65f, 0.65f, 0.65f, 1.0f, set);
+                light_set_specular(0.8f, 0.8f, 0.8f, 0.8f, set);
+            }
+
+            if (rend) {
+                render_set_exposure(2.5f, rend); // Increase exposure for FT look
+            }
+        }
+    }
+};
+
+
 void FTRestoration::init() {
     RandomInitHook::InstallAtOffset(0x1f4150);
 
@@ -395,23 +478,6 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(0x20c140).Write<uint32_t>(ARM64_W0_0);
         exl::patch::CodePatcher(0x20c144).Write<uint32_t>(ARM64_RET);
 
-        // Set bit 23 (24th on PC) to 1 using getters
-        // Replaces "ubfx w11, ..." with "MOV W11, #1" (0x5280002B)
-        exl::patch::CodePatcher(0x0020b2d0).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x0020c1b0).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x0020c6b0).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x0020c760).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x0020c7d0).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x0020ca18).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x00214584).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x00214644).Write<uint32_t>(0x5280002B);
-        exl::patch::CodePatcher(0x00214798).Write<uint32_t>(0x5280002B);
-        // Replaces "ubfx w10, ..." with "MOV W10, #1" (0x5280002A)
-        exl::patch::CodePatcher(0x0020c3f8).Write<uint32_t>(0x5280002A);
-        exl::patch::CodePatcher(0x00212cb0).Write<uint32_t>(0x5280002A);
-        exl::patch::CodePatcher(0x00212ea0).Write<uint32_t>(0x5280002A);
-        exl::patch::CodePatcher(0x00213bb0).Write<uint32_t>(0x5280002A);
-
         // Force getter to return 0x1
         exl::patch::CodePatcher(0x20c9f0).Write<uint32_t>(ARM64_W0_1);
         exl::patch::CodePatcher(0x20c9f4).Write<uint32_t>(ARM64_RET);
@@ -425,7 +491,7 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(0x20b040).Write<uint32_t>(ARM64_RET);
         exl::patch::CodePatcher(0x20b060).Write<uint32_t>(ARM64_RET);
 
-        PatchSettersWithRet();
+        //PatchSettersWithRet();
     }
 
     // 2. Anti-Aliasing (MLAA / FXAA / Off)
@@ -461,6 +527,7 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(ADDR_NPR_CSTMMENU_KILL).Write<uint32_t>(0xF901BE7F);
         exl::patch::CodePatcher(ADDR_FXAA_CSTMMENU_KILL).Write<uint32_t>(0xF901C27F);
     }
+    CustomizeSetLightingInfoHook::InstallAtOffset(0x14deb0);
 
     // 5. Adaptive Performance (ADP) Removal
     if (Config::disableAdp) {
@@ -469,8 +536,12 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(ADDR_ADP_SETTER).Write<uint32_t>(ARM64_RET);
 
         if (Config::resScaler != 1.0f) {
+            // handheld
             exl::patch::CodePatcher(0x20c2b0).Write<uint32_t>(ARM64_RET);
             exl::patch::CodePatcher(0x20b624).Write<uint32_t>(ARM64_NOP);
+            // docked
+            exl::patch::CodePatcher(0x20c310).Write<uint32_t>(ARM64_RET);
+            exl::patch::CodePatcher(0x20b630).Write<uint32_t>(ARM64_NOP);
         }
 
         if (Config::reflectionQuality != 1.0f) {
@@ -479,6 +550,7 @@ void FTRestoration::init() {
 
         // 30 FPS Lock
         if (Config::force30fps) {
+            // handheld
             exl::patch::CodePatcher(0x20b2e8).Write<uint32_t>(0x5280002D);
             exl::patch::CodePatcher(0x20c1f4).Write<uint32_t>(0x5280002C);
             exl::patch::CodePatcher(0x20c6f8).Write<uint32_t>(0x52800029);
@@ -490,6 +562,22 @@ void FTRestoration::init() {
             exl::patch::CodePatcher(0x214690).Write<uint32_t>(0x52800029);
             exl::patch::CodePatcher(0x21471c).Write<uint32_t>(0x5280002C);
             exl::patch::CodePatcher(0x2148d0).Write<uint32_t>(0x5280002C);
+            // docked
+            exl::patch::CodePatcher(0x20B2E4).Write<uint32_t>(0x5280002C);
+            exl::patch::CodePatcher(0x20C1F0).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x20C6F4).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x20C774).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x212D24).Write<uint32_t>(0x5280002A);
+            exl::patch::CodePatcher(0x212F14).Write<uint32_t>(0x5280002A);
+            exl::patch::CodePatcher(0x213C00).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x2145D4).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x21468C).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x214714).Write<uint32_t>(0x5280002B);
+            exl::patch::CodePatcher(0x2148CC).Write<uint32_t>(0x5280002B);
+
+            exl::patch::CodePatcher(0x20c854).Write<uint32_t>(0x1F2003D5); // NOP
+            exl::patch::CodePatcher(0x20c8a0).Write<uint32_t>(0x1F2003D5); // NOP
+            exl::patch::CodePatcher(0x20c8ec).Write<uint32_t>(0x1F2003D5); // NOP
         }
     }
 

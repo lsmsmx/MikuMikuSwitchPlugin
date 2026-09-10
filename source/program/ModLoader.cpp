@@ -11,7 +11,7 @@
 #include <string>
 #include <cstring>
 
-#define ADDR_INIT_ROM_DIR    FIX(0x001F1940) 
+#define ADDR_INIT_ROM_DIR    FIX(0x001F1940)
 #define ADDR_ROM_DIR_PATHS   0x00CDF7C0
 
 std::vector<std::string> ModLoader::modDirectoryPaths;
@@ -20,11 +20,11 @@ static std::vector<std::string> s_modRomPaths;
 void ModLoader::initMod(const std::string& path) {
     std::string configPath = path + "/config.toml";
     nn::fs::FileHandle h;
-    
+
     // If no mod-specific config exists, treat the mod as enabled by default
     if (R_FAILED(nn::fs::OpenFile(&h, configPath.c_str(), nn::fs::OpenMode_Read))) {
         modDirectoryPaths.push_back(path);
-        return; 
+        return;
     }
 
     int64_t size = 0;
@@ -35,7 +35,7 @@ void ModLoader::initMod(const std::string& path) {
 
     toml::parse_result result = toml::parse(content);
     if (!result) return;
-    
+
     toml::table config = std::move(result).table();
     if (!config["enabled"].value_or(true)) return;
 
@@ -58,10 +58,10 @@ void ModLoader::initMod(const std::string& path) {
  */
 HOOK_DEFINE_TRAMPOLINE(InitRomDirectoryPathsHook) {
     static void Callback() {
-        Orig(); 
+        Orig();
         uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
         auto romDirectoryPaths = *reinterpret_cast<libcxx_vector**>(base + ADDR_ROM_DIR_PATHS);
-        
+
         // Inject mod paths at the beginning of the list for highest priority
         if (romDirectoryPaths && !s_modRomPaths.empty()) {
             romDirectoryPaths->insert_front(s_modRomPaths);

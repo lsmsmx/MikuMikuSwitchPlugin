@@ -139,6 +139,15 @@ namespace DebugMode {
             bool isZL = (keysHeld & nn::hid::Button::ZL) && !block;
             bool isZR = (keysHeld & nn::hid::Button::ZR) && !block;
 
+            // Read live engine width and height directly from memory
+            uintptr_t mainBase = exl::util::GetMainModuleInfo().m_Total.m_Start;
+            uint32_t engineWidth  = *(uint32_t*)(mainBase + 0x00CA896C); // 4 bytes earlier (Width)
+            uint32_t engineHeight = *(uint32_t*)(mainBase + 0x00CA8970); // Current address (Height)
+
+            // Dynamic scale factors based on actual memory values
+            float scaleX = (float)engineWidth  / 1280.0f;
+            float scaleY = (float)engineHeight / 720.0f;
+
             static uint64_t lastTick = 0;
             uint64_t currentTick = nn::os::GetSystemTick().GetInt64Value();
             float dt = 1.0f / 60.0f;
@@ -169,7 +178,7 @@ namespace DebugMode {
                 if (ms.buttons & 2) isZR = true;
             }
 
-            // 3. Touch Screen with Multi-finger Click Delay Protection
+            // 3. Touch Screen with dynamic resolution mapping
             static int s_touchFrames = 0;
             static int s_maxFingersThisSession = 0;
 
@@ -178,32 +187,30 @@ namespace DebugMode {
                 nn::hid::GetTouchScreenState(&ts);
 
                 if (ts.count > 0) {
-                    // Keep track of coordinates from the first finger
-                    dis->MouseX = std::clamp((int32_t)ts.touches[0].x, 0, 1279);
-                    dis->MouseY = std::clamp((int32_t)ts.touches[0].y, 0, 719);
+                    dis->MouseX = std::clamp((int32_t)((float)ts.touches[0].x * scaleX), 0, (int32_t)engineWidth - 1);
+                    dis->MouseY = std::clamp((int32_t)((float)ts.touches[0].y * scaleY), 0, (int32_t)engineHeight - 1);
 
                     s_touchFrames++;
                     if (ts.count > s_maxFingersThisSession) {
                         s_maxFingersThisSession = ts.count;
                     }
 
-                    // Wait 3 frames (~50ms) to see if a second finger joins in
                     if (s_touchFrames > 3) {
                         if (s_maxFingersThisSession >= 2) {
-                            isZR = true; // Two fingers = Right Click (Bit 102)
+                            isZR = true;
                         } else {
-                            isZL = true; // One finger = Left Click (Bit 100)
+                            isZL = true;
                         }
                     }
                 } else {
-                    // Reset session when all fingers are lifted
                     s_touchFrames = 0;
                     s_maxFingersThisSession = 0;
                 }
             }
 
-            dis->MouseX = std::clamp(dis->MouseX, 0, 1279);
-            dis->MouseY = std::clamp(dis->MouseY, 0, 719);
+            // Clamp cursor to the actual engine resolution
+            dis->MouseX = std::clamp(dis->MouseX, 0, (int32_t)engineWidth - 1);
+            dis->MouseY = std::clamp(dis->MouseY, 0, (int32_t)engineHeight - 1);
 
             // Apply bits to the engine structure
             static bool s_zlPressed = false;

@@ -271,16 +271,18 @@ HOOK_DEFINE_TRAMPOLINE(FindScoreHook) {
     static void* Callback(void* mgr, int32_t id) {
         if (id <= 0) return Orig(mgr, id);
 
-        // Fast call without lock
-        void* baseScore = Orig(mgr, id);
-
-        // Fallback to custom hash map if not found
-        if (!baseScore) {
+        void* baseScore = nullptr;
+        {
             std::scoped_lock lock(g_SaveMtx);
             auto it = g_scoreMap.find(id);
             if (it != g_scoreMap.end()) {
                 baseScore = it->second;
             }
+        }
+
+        // Fallback to system slot
+        if (!baseScore) {
+            baseScore = Orig(mgr, id);
         }
 
         int32_t style = nc::GetCurrentStyleForSave();

@@ -4,6 +4,8 @@
 #include "fs.hpp"
 #include "macros.hpp"
 #include "Allocator.hpp"
+#include "Config.hpp"
+#include "logger.hpp"
 #include <cstring>
 #include <string>
 #include <vector>
@@ -72,11 +74,10 @@ bool resolveModDatabaseFilePath(const libcxx_string& filePath, std::string& dest
  * Hook to override the game's file resolution logic to prioritize modded files.
  */
 HOOK_DEFINE_TRAMPOLINE(ResolveFilePathObserverHook) {
-    static uint32_t Callback(libcxx_string* filePath, libcxx_string* destFilePath) {
-        std::string destPathTmp;
+    static uint64_t Callback(libcxx_string* filePath, libcxx_string* destFilePath) {
 
+        std::string destPathTmp;
         if (filePath && resolveModDatabaseFilePath(*filePath, destPathTmp)) {
-            // Check performance cache before hitting physical SD
             if (FastFileExists(destPathTmp)) {
                 if (destFilePath) {
                     destFilePath->assign(destPathTmp.c_str(), destPathTmp.length());
@@ -86,7 +87,23 @@ HOOK_DEFINE_TRAMPOLINE(ResolveFilePathObserverHook) {
             return 0;
         }
 
-        return Orig(filePath, destFilePath);
+        // -- fix jp forced broken pause menu --
+        // 1. Execute original path resolution
+        uint64_t ret = Orig(filePath, destFilePath);
+        // 2. Intercept and redirect DLC18 spr_db if forceJapanese is enabled
+        if (ret && destFilePath) {
+            const char* resolved = destFilePath->c_str();
+
+            // Check if DLC18 spr_db.bin was resolved
+            if (Config::forceJapanese && std::strstr(resolved, "/dlc18/") != nullptr && std::strstr(resolved, "/spr_db.bin") != nullptr) {
+                // Redirect to the clean original Japanese base database
+                const char* jpBasePath = "./rom_switch/./rom/2d/spr_db.bin";
+                destFilePath->assign(jpBasePath, std::strlen(jpBasePath));
+                return 1; // Return success with redirected path
+            }
+        }
+
+        return ret;
     }
 };
 

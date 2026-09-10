@@ -50,10 +50,32 @@ struct libcxx_string {
     bool operator<(const std::string& other) const {
         return std::strcmp(c_str(), other.c_str()) < 0;
     }
-    ~libcxx_string() {
-        if (is_long()) GameOperatorDelete(u.l.data);
+
+    // -- Rule of 3 --
+
+    libcxx_string(const libcxx_string& other) {
+        std::memset((void*)this, 0, sizeof(libcxx_string));
+        assign(other.c_str(), other.length());
     }
-    operator std::string() const { return std::string(c_str(), length()); }
+    libcxx_string& operator=(const libcxx_string& other) {
+        if (this != &other) {
+            assign(other.c_str(), other.length());
+        }
+        return *this;
+    }
+    libcxx_string(libcxx_string&& other) noexcept {
+        std::memcpy((void*)this, (const void*)&other, sizeof(libcxx_string));
+        std::memset((void*)&other, 0, sizeof(libcxx_string));
+    }
+
+    // Destructor
+    ~libcxx_string() {
+        if (is_long() && u.l.data) {
+            GameOperatorDelete(u.l.data);
+            u.l.data = nullptr;
+        }
+    }
+        operator std::string() const { return std::string(c_str(), length()); }
 };
 
 // Template comparator for string classes (std::string, prj::string, libcxx_string)
@@ -68,14 +90,14 @@ inline int compare_keys(const char* a, const libcxx_string& b) {
 }
 
 struct libcxx_list_node {
-    libcxx_list_node* next;
     libcxx_list_node* prev;
+    libcxx_list_node* next;
     libcxx_string value;
 };
 
 struct libcxx_list {
-    libcxx_list_node* end_next;
     libcxx_list_node* end_prev;
+    libcxx_list_node* end_next;
     size_t size;
 
     void push_back(const char* str) {

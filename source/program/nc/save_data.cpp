@@ -324,6 +324,8 @@ void nc::SyncNCShadowScores() {
 	constexpr size_t mod_offset = 0xB44;
 	constexpr size_t mod_size = 0x11F4 - mod_offset;
 
+	int32_t current_style = nc::GetCurrentStyleForSave();
+
 	for (auto& [key, ctx] : g_ncShadowMap) {
 		if (ctx.buffer.empty()) continue;
 
@@ -344,7 +346,12 @@ void nc::SyncNCShadowScores() {
 		if (ctx.base_ptr != nullptr) {
 			uint8_t* shadow_mods = ctx.buffer.data() + mod_offset;
 			uint8_t* base_mods = reinterpret_cast<uint8_t*>(ctx.base_ptr) + mod_offset;
-			std::memcpy(base_mods, shadow_mods, mod_size);
+
+			if (current_style == 0) {
+				std::memcpy(shadow_mods, base_mods, mod_size);
+			} else if (current_style == style) {
+				std::memcpy(base_mods, shadow_mods, mod_size);
+			}
 		}
 	}
 }

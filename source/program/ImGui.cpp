@@ -16,6 +16,7 @@
 #include "keyboard_sliders.hpp"
 #include "StateSwitcher.hpp"
 #include "MemoryScannerUi.hpp"
+#include "ResScalerUI.hpp"
 
 #ifndef IMNVNFUNC
 #define IMNVNFUNC __attribute__((visibility("default")))
@@ -556,11 +557,30 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         mem_hold_timer = 0.0f;
     }
 
-    // Input Overlay Hotkey: L3 + R3 (WITHOUT ZL)
+    // Resolution Scaler Overlay Hotkey: L3 + R3 + ZR
+    static float res_hold_timer = 0.0f;
+    bool isResCombo = (npad.buttons & nn::hid::Button::LStick) &&
+                      (npad.buttons & nn::hid::Button::RStick) &&
+                      (npad.buttons & nn::hid::Button::ZR);
+
+    if (isResCombo) {
+        res_hold_timer += dt;
+        if (res_hold_timer >= 0.8f && (res_hold_timer - dt) < 0.8f) {
+            ResScalerUi::g_showWindow = !ResScalerUi::g_showWindow;
+            if (ResScalerUi::g_showWindow) {
+                ImGui::g_imguiHasFocus = true;
+            }
+        }
+    } else {
+        res_hold_timer = 0.0f;
+    }
+
+    // Input Overlay Hotkey: L3 + R3 (WITHOUT ZL and WITHOUT ZR)
     static float overlay_hold_timer = 0.0f;
     bool isOverlayCombo = (npad.buttons & nn::hid::Button::LStick) &&
                           (npad.buttons & nn::hid::Button::RStick) &&
-                          !(npad.buttons & nn::hid::Button::ZL);
+                          !(npad.buttons & nn::hid::Button::ZL) &&
+                          !(npad.buttons & nn::hid::Button::ZR);
 
     if (isOverlayCombo) {
         overlay_hold_timer += dt;
@@ -582,7 +602,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     s_f10WasDown = isF10Down;
 
     bool overlayVisible = InputOverlay::IsVisible();
-    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow;
+    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow;
 
     if (!anyUiOpen && !overlayVisible) {
         ImGui::mikuposptrcounter = -1;
@@ -877,10 +897,11 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::End();
     }
 
-    // =====================================
     // 6. BSS GAPS OVERLAY
-    // =====================================
     MemoryScannerUi::DrawWindow();
+
+    // 7. RESOLUTION SCALER OVERLAY
+    ResScalerUi::DrawWindow();
 
     // Unified Overlay Call
     InputOverlay::Draw();
