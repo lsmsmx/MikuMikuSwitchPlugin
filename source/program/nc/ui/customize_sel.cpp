@@ -1,645 +1,582 @@
-#include <stdint.h>
-#include <vector>
-#include <memory>
+#include "customize_sel.hpp"
+#include "imgui/imgui.h"
 
-#include "lib.hpp"
+#include <string>
+#include <vector>
+#include <cmath>
+#include <algorithm>
+
+// Engine and project headers
 #include "../diva_nc.hpp"
 #include "../nc_state.hpp"
-#include "logger.hpp"
 #include "../sound_db.hpp"
 #include "../save_data.hpp"
 #include "../input.hpp"
 #include "../util.hpp"
 #include "../game/sound_effects.hpp"
 #include "../game/tech_zone.hpp"
-#include "common.hpp"
-#include "customize_sel.hpp"
-#include "../../Config.hpp"
 
-constexpr int32_t PreviewQueueIndex = 3;
-constexpr uint32_t SceneID = 14010150;
-
-struct CSStateConfigNC
+namespace CustomizeSelUi
 {
-	bool window_open = false;
-	bool assets_loaded = false;
-} static cs_state;
-
-struct SoundOptionInfo
-{
-	int32_t id = 0;
-	std::string preview_name;
-};
-
-struct SelectorExtraData
-{
-	int32_t same_index = -1;
-	int32_t song_default_index = -1;
-	int32_t base_index = 0;
-	int32_t same_id = 0;
-	std::vector<SoundOptionInfo> sounds;
-};
-
-static void PlayPreviewSoundEffect(HorizontalSelector* sel_base, const void* extra)
-{
-	HorizontalSelectorMulti* sel = static_cast<HorizontalSelectorMulti*>(sel_base);
-	const auto* ex_data = reinterpret_cast<const SelectorExtraData*>(extra);
-
-	std::string se_name;
-
-	if (sel->selected_index == ex_data->same_index)
-	{
-		if (ex_data->same_id == 1)
-		{
-			se_name = sound_effects::GetGameSoundEffect(0);
-		}
-		else if (ex_data->same_id == 2)
-		{
-			const auto* snd = util::FindWithID(*sound_db::GetStarSoundDB(), nc::GetConfigSet()->star_se_id);
-			if (snd != nullptr)
-				se_name = snd->se_name;
-		}
-	}
-	else
-		se_name = ex_data->sounds[sel->selected_index].preview_name;
-
-	if (se_name.length() > 0)
-	{
-		sound::ReleaseAllCues(PreviewQueueIndex);
-		sound::PlaySoundEffect(PreviewQueueIndex, se_name.c_str(), 1.0f);
-	}
-}
-
-static void PlayControlSEPreview(HorizontalSelector* sel_base, const void*)
-{
-	HorizontalSelectorMulti* sel = static_cast<HorizontalSelectorMulti*>(sel_base);
-	std::string se_name;
-
-	switch (sel->selected_index)
-	{
-	case 0:
-		se_name = sound_effects::GetGameSoundEffect(3);
-		break;
-	case 1:
-		if (const auto* snd = util::FindWithID(*sound_db::GetStarSoundDB(), nc::GetConfigSet()->star_se_id); snd != nullptr)
-			se_name = snd->se_name;
-		break;
-	}
-
-	if (se_name.length() > 0)
-	{
-		sound::ReleaseAllCues(PreviewQueueIndex);
-		sound::PlaySoundEffect(PreviewQueueIndex, se_name.c_str(), 1.0f);
-	}
-}
-
-static void StoreSoundEffectConfig(int32_t index, const SelectorExtraData& ex_data, int8_t* output)
-{
-	int32_t id = ex_data.sounds[index].id;
-	if (index == ex_data.song_default_index)
-		id = -2;
-	else if (index == ex_data.same_index)
-		id = -1;
-
-	*output = id;
-}
-
-class NCConfigWindow : public AetControl
-{
-protected:
-	bool finishing = false;
-	bool exit = false;
-	int32_t prev_selected_tab = 0;
-	int32_t selected_tab = 0;
-	int32_t selected_option = 0;
-	AetElement fade_base;
-	AetElement sub_menu_base;
-	AetElement help_loc;
-	AetElement subhelp_loc;
-	std::vector<std::unique_ptr<HorizontalSelector>> selectors;
-	std::vector<SelectorExtraData> user_data;
-	float win_opacity = 1.0f;
-	ConfigSet* config_set;
-
-	static constexpr int32_t WindowPrio = 20;
-	static constexpr int32_t MaxTabCount = 2;
-	static constexpr uint32_t NumberSprites[2][3] = {
-		{ 3084111403, 965335902,  268427239 },
-		{ 880817216,  1732835926, 3315147794 }
-	};
-
-	static constexpr uint32_t TabInfoSprites[2][MaxTabCount] = {
-		{ 3180940432, 4017317092 },
-		{ 2099321196, 2806350346 }
-	};
-
-	static constexpr uint32_t OptionInfoSpritesMM[MaxTabCount][5] = {
-		{ 0, 0, 0, 0, 0 },
-		{ 1445577118, 2528592817, 2367656052, 3568576596, 0 }
-	};
-
-	static constexpr uint32_t OptionInfoSpritesPS4[MaxTabCount][5] = {
-		{ 0, 0, 0, 0, 0 },
-		{ 2211731674, 2257174132, 2940751399, 160436885, 0 }
-	};
-
-	static constexpr uint32_t SoundPrioSubhelpMM[3] = { 2163775515, 1748614505, 2008681813 };
-	static constexpr uint32_t SoundPrioSubhelpPS4[3] = { 2775564751, 2489232069, 3322578733 };
-	static constexpr uint32_t PS4WinTitleSpriteID = 1861400143;
-
-	void CreateWindowBase()
-	{
-		if (Config::enableFtUi || Config::forceFtUI)
-		{
-			fade_base.SetScene(SceneID);
-			fade_base.SetLayer("ps4_help_win_bg", WindowPrio - 1, 14, AetAction_InLoop);
-			help_loc.SetScene(SceneID);
-			help_loc.SetLayer("ps4_nc_help_loc", WindowPrio + 1, 14, AetAction_InLoop);
-			subhelp_loc.SetScene(SceneID);
-			subhelp_loc.SetLayer("ps4_nc_subhelp_loc", WindowPrio + 1, 14, AetAction_InLoop);
-			SetLayer("ps4_help_win_l_back_t", WindowPrio, 14, AetAction_InLoop);
-		}
-		else
-		{
-			help_loc.SetScene(SceneID);
-			help_loc.SetLayer("nsw_nc_help_loc", WindowPrio + 1, 14, AetAction_InLoop);
-			subhelp_loc.SetScene(SceneID);
-			subhelp_loc.SetLayer("nsw_nc_subhelp_loc", WindowPrio + 1, 14, AetAction_InLoop);
-			SetLayer("nsw_cmn_win_nc_options_g_inout", WindowPrio, 14, AetAction_InLoop);
-		}
-	}
-
-	void CreateSubmenuBase(int32_t page_num)
-	{
-		std::string layer_name;
-		int32_t action;
-
-		if (Config::enableFtUi || Config::forceFtUI)
-		{
-			layer_name = util::Format("ps4_base_nc_anm_%02d", page_num);
-			action = AetAction_InLoop;
-		}
-		else
-		{
-			layer_name = util::Format("nsw_submenu_nc_anm_%02d", page_num);
-			action = AetAction_None;
-		}
-
-		if (!layer_name.empty())
-		{
-			sub_menu_base.SetScene(SceneID);
-			sub_menu_base.SetLayer(layer_name, WindowPrio, 14, action);
-		}
-	}
-
-public:
-	NCConfigWindow()
-	{
-		AllowInputsWhenBlocked(true);
-		config_set = nc::GetConfigSet();
-
-		SetScene(SceneID);
-		CreateWindowBase();
-		ChangeTab(0);
-	}
-
-	bool ShouldExit() const { return exit; }
-
-	void Ctrl() override
-	{
-		AetControl::Ctrl();
-
-		if (finishing && Ended())
-		{
-			exit = true;
-			return;
-		}
-
-		if (Config::enableFtUi || Config::forceFtUI)
-		{
-			if (auto layout = GetLayout("ps4_cmn_t_win_l_side.pic"); layout.has_value())
-				win_opacity = layout.value().opacity;
-		}
-		else
-		{
-			if (auto layout = GetLayout("nswgam_cmn_win_base.pic"); layout.has_value())
-				win_opacity = layout.value().opacity;
-		}
-
-		help_loc.SetOpacity(win_opacity);
-		subhelp_loc.SetOpacity(win_opacity);
-
-		for (auto& selector : selectors)
-		{
-			selector->SetOpacity(win_opacity);
-			selector->text_opacity = win_opacity;
-			selector->Ctrl();
-		}
-	}
-
-	void Disp() override
-	{
-		for (auto& selector : selectors)
-			selector->Disp();
-
-		if (Config::enableFtUi || Config::forceFtUI)
-		{
-			DrawSpriteAt("p_num_n_c", NumberSprites[0][selected_tab + 1]);
-			DrawSpriteAt("p_num_d_c", NumberSprites[0][MaxTabCount]);
-			DrawSpriteAt("p_win_img_c", TabInfoSprites[0][selected_tab]);
-			DrawSpriteAt("p_win_tit_lt", PS4WinTitleSpriteID);
-			help_loc.DrawSpriteAt("p_help_loc_c", OptionInfoSpritesPS4[selected_tab][selected_option]);
-
-			if (selected_tab == 1 && selected_option == 3)
-				subhelp_loc.DrawSpriteAt("p_subhelp_loc_c", SoundPrioSubhelpPS4[nc::GetSharedData().sound_prio]);
-		}
-		else
-		{
-			DrawSpriteAt("p_nc_page_num_10_c", NumberSprites[1][selected_tab + 1]);
-			DrawSpriteAt("p_nc_page_num_01_c", NumberSprites[1][MaxTabCount]);
-			DrawSpriteAt("p_nc_img_02_c", TabInfoSprites[1][prev_selected_tab]);
-			DrawSpriteAt("p_nc_img_01_c", TabInfoSprites[1][selected_tab]);
-			help_loc.DrawSpriteAt("p_help_loc_c", OptionInfoSpritesMM[selected_tab][selected_option]);
-
-			if (selected_tab == 1 && selected_option == 3)
-				subhelp_loc.DrawSpriteAt("p_subhelp_loc_c", SoundPrioSubhelpMM[nc::GetSharedData().sound_prio]);
-		}
-	}
-
-	void OnActionPressed(int32_t action) override
-	{
-		if (finishing)
-			return;
-
-		switch (action)
-		{
-		case KeyAction_SwapLeft:
-			ChangeTab(-1);
-			break;
-		case KeyAction_SwapRight:
-			ChangeTab(1);
-			break;
-		case KeyAction_Cancel:
-			SetMarkers("st_out", "ed_out", false);
-			fade_base.SetMarkers("st_out", "ed_out", false);
-			sound::ReleaseAllCues(PreviewQueueIndex);
-			sound::PlaySoundEffect(1, "se_ft_sys_dialog_close", 1.0f);
-			finishing = true;
-			break;
-		}
-	}
-
-	void OnActionPressedOrRepeat(int32_t action) override
-	{
-		if (finishing)
-			return;
-
-		switch (action)
-		{
-		case KeyAction_MoveUp:
-			if (SetSelectorIndex(-1, true))
-				sound::PlaySelectSE();
-			break;
-		case KeyAction_MoveDown:
-			if (SetSelectorIndex(1, true))
-				sound::PlaySelectSE();
-			break;
-		}
-	}
-
-	template <typename T, typename F>
-	T* CreateOptionElement(int32_t id, int32_t loc_id, F func = nullptr)
-	{
-		diva_nc::vec3 pos = { 0.0f, 0.0f, 0.0f };
-
-		if (auto layout = sub_menu_base.GetLayout(util::Format("p_nc_submenu_%02d_c", loc_id)); layout.has_value())
-			pos = layout.value().position;
-
-		std::unique_ptr<T> opt;
-		if (Config::enableFtUi || Config::forceFtUI)
-		{
-			opt = std::make_unique<T>(
-				SceneID,
-				util::Format("ps4_options_base_nc_%02d_ft", id),
-				WindowPrio,
-				14
-			);
-
-			opt->SetArrows("ps4_sel_arrow_l", "ps4_sel_arrow_r");
-		}
-		else
-		{
-			opt = std::make_unique<T>(
-				SceneID,
-				util::Format("nsw_option_submenu_nc_%02d__f", id),
-				WindowPrio,
-				14
-			);
-		}
-
-		opt->AllowInputsWhenBlocked(true);
-		opt->SetPosition(pos);
-
-		if (func)
-			opt->SetOnChangeNotifier(func);
-
-		selectors.push_back(std::move(opt));
-		return static_cast<T*>(selectors.back().get());
-	}
-
-	void ChangeTab(int32_t dir)
-	{
-		prev_selected_tab = selected_tab;
-		selected_tab = util::Wrap(selected_tab + dir, 0, MaxTabCount - 1);
-		CreateSubmenuBase(selected_tab + 1);
-
-		auto putSoundEffectList = [&](int32_t id, int32_t loc_id, const std::vector<SoundInfo>& sounds, int32_t same_id, int8_t* selected_id)
-		{
-			size_t index = selectors.size();
-
-			auto& ex_data = user_data.emplace_back();
-			ex_data.same_id = same_id;
-
-			auto* opt = CreateOptionElement<HorizontalSelectorMulti, HorizontalSelectorMulti::Notifier>(
-				id,
-				loc_id,
-				[this, index, selected_id](int32_t i) { StoreSoundEffectConfig(i, user_data[index], selected_id); }
-			);
-
-			if (same_id > 0)
-			{
-				if (*selected_id == -1)
-					opt->selected_index = static_cast<int32_t>(opt->values.size());
-
-				ex_data.same_index = static_cast<int32_t>(opt->values.size());
-				ex_data.sounds.emplace_back().id = -1;
-				ex_data.base_index++;
-
-				opt->values.emplace_back(loc::GetString(6250 + same_id));
-			}
-
-			for (const auto& snd : sounds)
-			{
-				if (snd.id == *selected_id)
-					opt->selected_index = static_cast<int32_t>(opt->values.size());
-
-				auto& info = ex_data.sounds.emplace_back();
-				info.id = snd.id;
-				info.preview_name = !snd.se_preview_name.empty() ? snd.se_preview_name : snd.se_name;
-
-				opt->values.push_back(snd.name);
-			}
-
-			opt->SetExtraData(&user_data[index]);
-			opt->SetPreviewNotifier(PlayPreviewSoundEffect);
-		};
-
-		selectors.clear();
-		user_data.clear();
-		user_data.reserve(20);
-		if (selected_tab == 0)
-		{
-			putSoundEffectList(1, 1, *sound_db::GetButtonLongOnSoundDB(), 1, &config_set->button_l_se_id);
-			putSoundEffectList(2, 2, *sound_db::GetButtonWSoundDB(),      1, &config_set->button_w_se_id);
-			putSoundEffectList(3, 3, *sound_db::GetStarSoundDB(),         0, &config_set->star_se_id);
-			putSoundEffectList(4, 4, *sound_db::GetLinkSoundDB(),         2, &config_set->link_se_id);
-			putSoundEffectList(5, 5, *sound_db::GetStarWSoundDB(),        2, &config_set->star_w_se_id);
-		}
-		else if (selected_tab == 1)
-		{
-			auto* sens = CreateOptionElement<HorizontalSelectorNumber, HorizontalSelectorNumber::Notifier>(6, 1);
-			sens->value_min = 20.0f;
-			sens->value_max = 80.0f;
-			sens->SetValue(nc::GetSharedData().stick_sensitivity);
-			sens->format_string = "%.0f%%";
-			sens->SetOnChangeNotifier([](float v) { nc::GetSharedData().stick_sensitivity = v; });
-
-			auto* ctrl_se = CreateOptionElement<HorizontalSelectorMulti, HorizontalSelectorMulti::Notifier>(7, 2);
-			ctrl_se->values.push_back("Slide");
-			ctrl_se->values.push_back("Star");
-			ctrl_se->selected_index = nc::GetSharedData().stick_control_se;
-			ctrl_se->SetOnChangeNotifier([](int32_t index) { nc::GetSharedData().stick_control_se = index; });
-			ctrl_se->SetPreviewNotifier(PlayControlSEPreview);
-
-			auto* tz = CreateOptionElement<HorizontalSelectorMulti, HorizontalSelectorMulti::Notifier>(8, 3);
-			tz->values.push_back("F");
-			tz->values.push_back("F 2nd");
-			tz->values.push_back("X");
-			tz->values.push_back("Future Tone");
-			tz->values.push_back("Mega Mix+");
-			tz->values.push_back("Match UI");
-
-			int32_t tz_style = nc::GetSharedData().tech_zone_style;
-			switch (tz_style)
-			{
-			case TechZoneStyle_F:
-			case TechZoneStyle_F2nd:
-			case TechZoneStyle_X:
-				tz->selected_index = tz_style;
-				break;
-			case TechZoneStyle_FT:
-				tz->selected_index = 3;
-				break;
-			case TechZoneStyle_M39:
-				tz->selected_index = 4;
-				break;
-			case TechZoneStyle_Match:
-				tz->selected_index = 5;
-				break;
-			}
-
-			tz->SetOnChangeNotifier([this](int32_t index)
-			{
-				int32_t& tz_style = nc::GetSharedData().tech_zone_style;
-				switch (index)
-				{
-				case 0:
-				case 1:
-				case 2:
-					tz_style = index;
-					break;
-				case 3:
-					tz_style = TechZoneStyle_FT;
-					break;
-				case 4:
-					tz_style = TechZoneStyle_M39;
-					break;
-				case 5:
-					tz_style = TechZoneStyle_Match;
-					break;
-				}
-			});
-
-			auto* snd = CreateOptionElement<HorizontalSelectorMulti, HorizontalSelectorMulti::Notifier>(9, 4);
-			snd->values.push_back("Disabled");
-			snd->values.push_back("Mute");
-			snd->selected_index = nc::GetSharedData().sound_prio > 0 ? 1 : 0;
-			snd->SetOnChangeNotifier([](int32_t index) { nc::GetSharedData().sound_prio = (index == 1 ? 2 : 0); });
-		}
-
-		SetSelectorIndex(0);
-	}
-
-	bool SetSelectorIndex(int32_t index, bool relative = false)
-	{
-		int32_t prev_index = selected_option;
-		selected_option = util::Wrap<int32_t>(relative ? selected_option + index : index, 0, selectors.size() - 1);
-
-		for (size_t i = 0; i < selectors.size(); i++)
-			selectors[i]->SetFocus(i == selected_option);
-
-		return selected_option != prev_index;
-	}
-};
-
-namespace customize_sel
-{
-	std::unique_ptr<NCConfigWindow> window;
-
-	static bool CtrlWindow()
-	{
-		if (!cs_state.window_open)
-		{
-			diva_nc::InputState* is = diva_nc::GetInputState(0);
-			if (is->IsButtonTapped(92) || is->IsButtonTapped(13))
-			{
-				window = std::make_unique<NCConfigWindow>();
-				cs_state.window_open = true;
-				nc::BlockInputs();
-				sound::PlaySoundEffect(1, "se_ft_sys_dialog_open", 1.0f);
-			}
-		}
-
-		if (cs_state.window_open)
-		{
-			window->Ctrl();
-			if (window->ShouldExit())
-			{
-				window.reset();
-				cs_state.window_open = false;
-				nc::UnblockInputs();
-			}
-		}
-
-		return cs_state.window_open;
-	}
-}
-
-// --- HOOKS ---
-
-static bool log_ctrl_first = true;
-static bool log_disp_first = true;
-static bool log_mainctrl_first = true;
-static bool log_window_state = false;
-
-// 1. CustomizeSelTaskInit (0x778930)
-HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskInitHook) {
-	static uint64_t Callback(uint64_t a1) {
-		uint64_t result = Orig(a1);
-
-		sound::RequestFarcLoad("rom/sound/se_nc.farc");
-		sound::RequestFarcLoad("rom/sound/se_nc_option.farc");
-
-		libcxx_string out;
-		std::string_view out2;
-
-		aet::LoadAetSet(14010060, &out);
-		spr::LoadSprSet(14020060, &out2);
-
-		cs_state.assets_loaded = false;
-
-		log_ctrl_first = true;
-		log_disp_first = true;
-		log_mainctrl_first = true;
-
-		return result;
-	}
-};
-
-// 2. CustomizeSelTaskCtrl (0x778980)
-HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskCtrlHook) {
-	static uint64_t Callback(uint64_t a1) {
-		if (log_ctrl_first) {
-			log_ctrl_first = false;
-		}
-
-		if (!cs_state.assets_loaded)
-		{
-			bool farc1 = !sound::IsFarcLoading("rom/sound/se_nc.farc");
-			bool farc2 = !sound::IsFarcLoading("rom/sound/se_nc_option.farc");
-			bool aet1  = !aet::CheckAetSetLoading(14010060);
-			bool spr1  = !spr::CheckSprSetLoading(14020060);
-
-			if (farc1 && farc2 && aet1 && spr1) {
-				cs_state.assets_loaded = true;
-			}
-		}
-
-		return Orig(a1);
-	}
-};
-
-// 3. CustomizeSelTaskDest (0x778990)
-HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskDestHook) {
-	static uint64_t Callback(uint64_t a1) {
-		if (customize_sel::window) {
-			customize_sel::window.reset();
-		}
-
-		sound::UnloadFarc("rom/sound/se_nc.farc");
-		sound::UnloadFarc("rom/sound/se_nc_option.farc");
-		aet::UnloadAetSet(14010060);
-		spr::UnloadSprSet(14020060);
-
-		cs_state.assets_loaded = false;
-
-		uint64_t result = Orig(a1);
-		return result;
-	}
-};
-
-// 4. CustomizeSelTaskDisp (0x7789f0)
-HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskDispHook) {
-	static void Callback(uint64_t a1) {
-		if (log_disp_first) {
-			log_disp_first = false;
-		}
-
-		Orig(a1);
-
-		if (customize_sel::window) {
-			if (!log_window_state) {
-				log_window_state = true;
-			}
-			customize_sel::window->Disp();
-		} else {
-			if (log_window_state) {
-				log_window_state = false;
-			}
-		}
-	}
-};
-
-// 5. CSTopMenuMainCtrl (0x7a9370)
-HOOK_DEFINE_TRAMPOLINE(CSTopMenuMainCtrlHook) {
-	static uint64_t Callback(uint64_t a1) {
-		if (log_mainctrl_first) {
-			log_mainctrl_first = false;
-		}
-
-		bool win_was_open = cs_state.window_open;
-		customize_sel::CtrlWindow();
-
-		return Orig(a1);
-	}
-};
-
-void InstallCustomizeSelHooks()
-{
-	// Hooks can be enabled when required:
-	//CustomizeSelTaskInitHook::InstallAtOffset(0x778930);
-	//CustomizeSelTaskCtrlHook::InstallAtOffset(0x778980);
-	//CustomizeSelTaskDestHook::InstallAtOffset(0x778990);
-	//CustomizeSelTaskDispHook::InstallAtOffset(0x7789f0);
-	//CSTopMenuMainCtrlHook::InstallAtOffset(0x7a9370);
+    constexpr int32_t PreviewQueueIndex = 3;
+    constexpr int32_t SFXQueueIndex = 1;
+
+    constexpr float DialogW = 680.0f;
+    constexpr float DialogH = 440.0f;
+    constexpr float CanvasW = 1280.0f;
+    constexpr float CanvasH = 720.0f;
+
+    constexpr float AnimSpeedIn  = 8.0f;
+    constexpr float AnimSpeedOut = 9.0f;
+
+    static AnimState g_animState = AnimState::Closed;
+    static float g_animProgress  = 0.0f;
+
+    static bool s_assetsLoaded = false;
+    static bool s_inCustomizeScene = false;
+
+    constexpr int32_t TotalPages = 3;
+    static int32_t g_currentPage = 0;
+    static int32_t g_selectedItem = 0;
+
+    static float g_pulseTimer = 0.0f;
+
+    bool IsOpen()
+    {
+        return g_animState != AnimState::Closed;
+    }
+
+    void Open()
+    {
+        if (!s_assetsLoaded)
+            return;
+
+        if (g_animState == AnimState::Closed || g_animState == AnimState::Closing)
+        {
+            g_animState = AnimState::Opening;
+            nc::BlockInputs();
+            sound::PlaySoundEffect(SFXQueueIndex, "se_ft_sys_dialog_open", 1.0f);
+        }
+    }
+
+    void Close()
+    {
+        if (g_animState == AnimState::Open || g_animState == AnimState::Opening)
+        {
+            g_animState = AnimState::Closing;
+            sound::PlaySoundEffect(SFXQueueIndex, "se_ft_sys_dialog_close", 1.0f);
+            nc::SaveSaveDataNC();
+            sound::ReleaseAllCues(PreviewQueueIndex);
+        }
+    }
+
+    void ForceClose()
+    {
+        g_animState = AnimState::Closed;
+        g_animProgress = 0.0f;
+        nc::UnblockInputs();
+    }
+
+    void Toggle()
+    {
+        if (IsOpen())
+            Close();
+        else
+            Open();
+    }
+
+    static void PlayPreviewCue(const std::string& se_name)
+    {
+        if (!se_name.empty())
+        {
+            sound::ReleaseAllCues(PreviewQueueIndex);
+            sound::PlaySoundEffect(PreviewQueueIndex, se_name.c_str(), 1.0f);
+        }
+    }
+
+    static void PlayCurrentPreview()
+    {
+        ConfigSet* cfg = nc::GetConfigSet();
+        if (!cfg) return;
+
+        std::string se_name;
+
+        if (g_currentPage == 0)
+        {
+            auto resolveAndPlay = [cfg](int8_t current_id, const std::vector<SoundInfo>& db, int32_t same_id)
+            {
+                std::string cue;
+                if (current_id == -1)
+                {
+                    if (same_id == 1)
+                        cue = sound_effects::GetGameSoundEffect(0);
+                    else if (same_id == 2)
+                    {
+                        const auto* star_snd = util::FindWithID(*sound_db::GetStarSoundDB(), cfg->star_se_id);
+                        if (star_snd) cue = star_snd->se_name;
+                    }
+                }
+                else
+                {
+                    const auto* snd = util::FindWithID(db, current_id);
+                    if (snd)
+                    {
+                        cue = !snd->se_preview_name.empty() ? snd->se_preview_name : snd->se_name;
+                    }
+                }
+                PlayPreviewCue(cue);
+            };
+
+            switch (g_selectedItem)
+            {
+            case 0: resolveAndPlay(cfg->button_l_se_id, *sound_db::GetButtonLongOnSoundDB(), 1); break;
+            case 1: resolveAndPlay(cfg->button_w_se_id, *sound_db::GetButtonWSoundDB(),      1); break;
+            case 2: resolveAndPlay(cfg->star_se_id,     *sound_db::GetStarSoundDB(),         0); break;
+            case 3: resolveAndPlay(cfg->link_se_id,     *sound_db::GetLinkSoundDB(),         2); break;
+            case 4: resolveAndPlay(cfg->star_w_se_id,   *sound_db::GetStarWSoundDB(),        2); break;
+            }
+        }
+        else if (g_currentPage == 2 && g_selectedItem == 1)
+        {
+            if (nc::GetSharedData().stick_control_se == 0)
+                se_name = sound_effects::GetGameSoundEffect(3);
+            else
+            {
+                const auto* snd = util::FindWithID(*sound_db::GetStarSoundDB(), nc::GetConfigSet()->star_se_id);
+                if (snd) se_name = snd->se_name;
+            }
+            PlayPreviewCue(se_name);
+        }
+    }
+
+    static int32_t GetMaxItemsForPage(int32_t page)
+    {
+        switch (page)
+        {
+        case 0: return 5;
+        case 1: return 2;
+        case 2: return 4;
+        default: return 1;
+        }
+    }
+
+    static void ChangeOptionValue(int32_t dir)
+    {
+        ConfigSet* cfg = nc::GetConfigSet();
+        SharedData& shared = nc::GetSharedData();
+        if (!cfg) return;
+
+        bool changed = false;
+
+        if (g_currentPage == 0)
+        {
+            auto cycleSound = [&](int8_t* val, int8_t* val_alias, const std::vector<SoundInfo>& db, int32_t same_id)
+            {
+                std::vector<int8_t> ids;
+                if (same_id == 1 || same_id == 2) ids.push_back(-1);
+                for (const auto& s : db) ids.push_back(s.id);
+
+                int cur = 0;
+                for (size_t i = 0; i < ids.size(); i++) {
+                    if (ids[i] == *val) { cur = static_cast<int>(i); break; }
+                }
+                cur = util::Wrap(cur + dir, 0, static_cast<int>(ids.size()) - 1);
+                *val = ids[cur];
+                if (val_alias) *val_alias = *val;
+                changed = true;
+            };
+
+            switch (g_selectedItem)
+            {
+            case 0: cycleSound(&cfg->button_l_se_id, &cfg->rush_se_id, *sound_db::GetButtonLongOnSoundDB(), 1); break;
+            case 1: cycleSound(&cfg->button_w_se_id, nullptr,          *sound_db::GetButtonWSoundDB(),      1); break;
+            case 2: cycleSound(&cfg->star_se_id,     nullptr,          *sound_db::GetStarSoundDB(),         0); break;
+            case 3: cycleSound(&cfg->link_se_id,     nullptr,          *sound_db::GetLinkSoundDB(),         2); break;
+            case 4: cycleSound(&cfg->star_w_se_id,   nullptr,          *sound_db::GetStarWSoundDB(),        2); break;
+            }
+        }
+        else if (g_currentPage == 1)
+        {
+            if (g_selectedItem == 0)
+            {
+                int32_t cur = cfg->tech_zone_style;
+                cur = util::Wrap(cur + dir, 0, 2);
+                cfg->tech_zone_style = (int8_t)cur;
+                shared.tech_zone_style = cur;
+                changed = true;
+            }
+            else if (g_selectedItem == 1)
+            {
+                int32_t* tzPrio = reinterpret_cast<int32_t*>(&shared.reserved[4]);
+                int32_t styles[] = { 0, 1, 2, 3, 6, 20 };
+                constexpr int num = 6;
+                int cur = 1;
+                for (int i = 0; i < num; i++) {
+                    if (styles[i] == *tzPrio) { cur = i; break; }
+                }
+                cur = util::Wrap(cur + dir, 0, num - 1);
+                *tzPrio = styles[cur];
+                changed = true;
+            }
+        }
+        else if (g_currentPage == 2)
+        {
+            switch (g_selectedItem)
+            {
+            case 0:
+                shared.stick_sensitivity = std::clamp(shared.stick_sensitivity + (dir * 5), 20, 80);
+                changed = true;
+                break;
+            case 1:
+                shared.stick_control_se = util::Wrap<uint8_t>(shared.stick_control_se + dir, 0, 1);
+                changed = true;
+                break;
+            case 2:
+                shared.sound_prio = (shared.sound_prio > 0) ? 0 : 2;
+                changed = true;
+                break;
+            case 3:
+            {
+                int32_t* starCtrl = reinterpret_cast<int32_t*>(&shared.reserved[0]);
+                *starCtrl = util::Wrap(*starCtrl + dir, 0, 2);
+                changed = true;
+                break;
+            }
+            }
+        }
+
+        if (changed) {
+            sound::ReleaseAllCues(PreviewQueueIndex);
+            sound::PlaySoundEffect(SFXQueueIndex, "se_ft_music_selector_select_01", 1.0f);
+        }
+    }
+
+    void Update()
+    {
+        diva_nc::InputState* is = diva_nc::GetInputState(0);
+        if (!is) return;
+
+        bool zlTapped = is->IsButtonTappedAbs(92) || is->IsButtonTappedAbs(13);
+
+        if (g_animState == AnimState::Closed)
+        {
+            if (zlTapped) Open();
+            return;
+        }
+
+        nc::BlockInputs();
+
+        bool cancelTapped = is->IsButtonTappedAbs(9);
+        if (zlTapped || cancelTapped)
+        {
+            Close();
+            return;
+        }
+
+        if (g_animState != AnimState::Open) return;
+
+        if (is->IsButtonTappedAbs(11))
+        {
+            g_currentPage = util::Wrap(g_currentPage - 1, 0, TotalPages - 1);
+            g_selectedItem = std::clamp(g_selectedItem, 0, GetMaxItemsForPage(g_currentPage) - 1);
+            sound::PlaySelectSE();
+        }
+        else if (is->IsButtonTappedAbs(12))
+        {
+            g_currentPage = util::Wrap(g_currentPage + 1, 0, TotalPages - 1);
+            g_selectedItem = std::clamp(g_selectedItem, 0, GetMaxItemsForPage(g_currentPage) - 1);
+            sound::PlaySelectSE();
+        }
+
+        int32_t maxItems = GetMaxItemsForPage(g_currentPage);
+        if (is->IsButtonTappedAbs(3) || nc::IsButtonTappedOrRepeat(is, 3))
+        {
+            g_selectedItem = util::Wrap(g_selectedItem - 1, 0, maxItems - 1);
+            sound::PlaySelectSE();
+        }
+        else if (is->IsButtonTappedAbs(4) || nc::IsButtonTappedOrRepeat(is, 4))
+        {
+            g_selectedItem = util::Wrap(g_selectedItem + 1, 0, maxItems - 1);
+            sound::PlaySelectSE();
+        }
+
+        if (is->IsButtonTappedAbs(5) || nc::IsButtonTappedOrRepeat(is, 5))
+            ChangeOptionValue(-1);
+        else if (is->IsButtonTappedAbs(6) || nc::IsButtonTappedOrRepeat(is, 6))
+            ChangeOptionValue(1);
+
+        if (is->IsButtonTappedAbs(10) || is->IsButtonTappedAbs(7))
+            PlayCurrentPreview();
+    }
+
+    static void DrawBoldText(ImDrawList* drawList, ImVec2 pos, ImU32 col, const char* text)
+    {
+        drawList->AddText(pos, col, text);
+        drawList->AddText(ImVec2(pos.x + 1.0f, pos.y), col, text);
+        drawList->AddText(ImVec2(pos.x, pos.y + 0.5f), col, text);
+    }
+
+    void Draw()
+    {
+        if (g_animState == AnimState::Closed) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+        float dt = io.DeltaTime > 0.0f ? io.DeltaTime : (1.0f / 60.0f);
+        g_pulseTimer += dt * 4.0f;
+
+        if (g_animState == AnimState::Opening)
+        {
+            g_animProgress += dt * AnimSpeedIn;
+            if (g_animProgress >= 1.0f)
+            {
+                g_animProgress = 1.0f;
+                g_animState = AnimState::Open;
+            }
+        }
+        else if (g_animState == AnimState::Closing)
+        {
+            g_animProgress -= dt * AnimSpeedOut;
+            if (g_animProgress <= 0.0f)
+            {
+                ForceClose();
+                return;
+            }
+        }
+
+        float alpha = std::clamp(g_animProgress, 0.0f, 1.0f);
+        float scale = 0.88f + 0.12f * std::sin(alpha * 1.5707963f);
+
+        float curW = DialogW * scale;
+        float curH = DialogH * scale;
+        ImVec2 center((CanvasW - curW) * 0.5f, (CanvasH - curH) * 0.5f);
+
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+        ImGui::SetNextWindowPos(center, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.0f);
+
+        ImGuiWindowFlags winFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
+
+        if (ImGui::Begin("##NC_CustomPillWindow", nullptr, winFlags))
+        {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRectFullScreen();
+
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(245, 252, 252, (int)(245.0f * alpha)), 14.0f);
+            drawList->AddRect(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(0, 206, 209, (int)(220.0f * alpha)), 14.0f, 0, 2.5f);
+
+            float topH = 38.0f * scale;
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + topH), IM_COL32(0, 150, 180, (int)(250.0f * alpha)), 14.0f, ImDrawFlags_RoundCornersTop);
+
+            const char* topTitle = "New Classics Options";
+            ImGui::SetWindowFontScale(1.35f);
+            ImVec2 topTextSz = ImGui::CalcTextSize(topTitle);
+            DrawBoldText(drawList, ImVec2(center.x + (curW - topTextSz.x) * 0.5f, center.y + 7.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), topTitle);
+            ImGui::SetWindowFontScale(1.0f);
+
+            int32_t targetId = nc::GetConfigSetID();
+            std::string slotBadge;
+            if (targetId == -1)      slotBadge = "[ Preset 1 (Slot A) ]";
+            else if (targetId == -2) slotBadge = "[ Preset 2 (Slot B) ]";
+            else if (targetId == -3) slotBadge = "[ Preset 3 (Slot C) ]";
+            else if (targetId > 0)   slotBadge = util::Format("[ Song Specific (PV %d) ]", targetId);
+            else                     slotBadge = util::Format("[ Config #%d ]", targetId);
+
+            ImVec2 slotSz = ImGui::CalcTextSize(slotBadge.c_str());
+            drawList->AddText(ImVec2(center.x + (curW - slotSz.x) * 0.5f, center.y + 44.0f), IM_COL32(0, 130, 155, (int)(240.0f * alpha)), slotBadge.c_str());
+
+            const char* bannerTitles[TotalPages] = { "Sound Config", "Technical Zone Settings", "Other Settings" };
+            const char* subTitles[TotalPages] = {
+                "This page allows you to modify the audio settings for exclusive console buttons.",
+                "This page lets you change the visuals and display of Tech Zones.",
+                "This page lets you adjust sensitivity, visuals, delay and control SE."
+            };
+
+            float ribbonW = 340.0f * scale;
+            float ribbonH = 26.0f * scale;
+            ImVec2 ribbonPos(center.x + (curW - ribbonW) * 0.5f, center.y + 64.0f);
+            drawList->AddRectFilled(ribbonPos, ImVec2(ribbonPos.x + ribbonW, ribbonPos.y + ribbonH), IM_COL32(24, 88, 160, (int)(235.0f * alpha)), 8.0f);
+
+            ImGui::SetWindowFontScale(1.15f);
+            ImVec2 bTextSz = ImGui::CalcTextSize(bannerTitles[g_currentPage]);
+            DrawBoldText(drawList, ImVec2(ribbonPos.x + (ribbonW - bTextSz.x) * 0.5f, ribbonPos.y + 4.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), bannerTitles[g_currentPage]);
+            ImGui::SetWindowFontScale(1.0f);
+
+            ImVec2 subTextSz = ImGui::CalcTextSize(subTitles[g_currentPage]);
+            drawList->AddText(ImVec2(center.x + (curW - subTextSz.x) * 0.5f, center.y + 94.0f), IM_COL32(70, 90, 100, (int)(220.0f * alpha)), subTitles[g_currentPage]);
+
+            ConfigSet* cfg = nc::GetConfigSet();
+            SharedData& shared = nc::GetSharedData();
+
+            struct ItemRow { std::string label, value, help_line1, help_line2; };
+            std::vector<ItemRow> rows;
+
+            if (g_currentPage == 0 && cfg)
+            {
+                auto getSoundName = [](int8_t id, const std::vector<SoundInfo>& db, int32_t same_id) -> std::string
+                {
+                    if (id == -1) return (same_id == 1) ? "Same as Button SE" : "Same as Star";
+                    const auto* s = util::FindWithID(db, id);
+                    return s ? s->name : "None";
+                };
+
+                rows.push_back({ "Sustain", getSoundName(cfg->button_l_se_id, *sound_db::GetButtonLongOnSoundDB(), 1), "Sound effect played when holding Sustain / Rush notes.", "" });
+                rows.push_back({ "Double",  getSoundName(cfg->button_w_se_id, *sound_db::GetButtonWSoundDB(),      1), "Sound effect played when hitting Double notes.", "" });
+                rows.push_back({ "Star",    getSoundName(cfg->star_se_id,     *sound_db::GetStarSoundDB(),         0), "Sound effect played when hitting standard Star notes.", "" });
+                rows.push_back({ "Link",    getSoundName(cfg->link_se_id,     *sound_db::GetLinkSoundDB(),         2), "Sound effect played when hitting Link Star notes.", "" });
+                rows.push_back({ "D-Star",  getSoundName(cfg->star_w_se_id,   *sound_db::GetStarWSoundDB(),        2), "Sound effect played when hitting Double Star notes.", "" });
+            }
+            else if (g_currentPage == 1 && cfg)
+            {
+                const char* tzDispNames[] = { "Off", "Console/Mixed Only", "Always" };
+                int curDisp = std::clamp((int)cfg->tech_zone_style, 0, 2);
+                rows.push_back({ "Display", tzDispNames[curDisp], "Choose when to display the visual indicator for the Technical Zone.", "The score is not affected in Arcade-style charts." });
+
+                int32_t tzPrio = *reinterpret_cast<int32_t*>(&shared.reserved[4]);
+                std::string prioName = "F 2nd";
+                if (tzPrio == 0) prioName = "F"; else if (tzPrio == 1) prioName = "F 2nd"; else if (tzPrio == 2) prioName = "X"; else if (tzPrio == 3) prioName = "Future Tone"; else if (tzPrio == 6) prioName = "Mega Mix+"; else if (tzPrio == 20) prioName = "Match UI";
+                rows.push_back({ "Sound Priority", prioName, "Choose which sound effect set takes priority during Technical Zones.", "" });
+            }
+            else if (g_currentPage == 2)
+            {
+                rows.push_back({ "Stick Sensitivity", util::Format("%d%%", shared.stick_sensitivity), "Adjust stick sensitivity when hitting Star notes.", "" });
+                rows.push_back({ "Flick Control SE", shared.stick_control_se == 0 ? "Slide" : "Star", "Sound effect to play when flicking the analog stick.", "" });
+                rows.push_back({ "Sound Priority", shared.sound_prio > 0 ? "Mute" : "Disabled", "Adjust sound playback behavior when both console and arcade sounds trigger.", "" });
+
+                int32_t starCtrl = *reinterpret_cast<int32_t*>(&shared.reserved[0]);
+                const char* starNames[] = { "Sticks Only", "Buttons Only", "Both" };
+                rows.push_back({ "Star Control", starNames[std::clamp(starCtrl, 0, 2)], "Choose which input method can trigger Star notes.", "" });
+            }
+
+            float startY = center.y + 118.0f;
+            float rowH = (g_currentPage == 0) ? 36.0f : 42.0f;
+            float pillW = 530.0f * scale;
+            float pillH = (g_currentPage == 0) ? 30.0f : 34.0f;
+
+            for (size_t i = 0; i < rows.size(); i++)
+            {
+                bool isSelected = (g_selectedItem == (int)i);
+                ImVec2 pPos(center.x + (curW - pillW) * 0.5f, startY + (i * rowH));
+
+                if (isSelected) {
+                    drawList->AddRectFilled(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(0, 215, 225, (int)(250.0f * alpha)), pillH * 0.5f);
+                    drawList->AddRect(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(255, 255, 255, (int)(220.0f * alpha)), pillH * 0.5f, 0, 1.5f);
+                } else {
+                    drawList->AddRectFilled(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(225, 233, 238, (int)(210.0f * alpha)), pillH * 0.5f);
+                    drawList->AddRect(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(185, 200, 210, (int)(150.0f * alpha)), pillH * 0.5f, 0, 1.0f);
+                }
+
+                ImGui::SetWindowFontScale(1.10f);
+                ImVec2 lblSz = ImGui::CalcTextSize(rows[i].label.c_str());
+                float labelColW = pillW - 240.0f;
+                ImVec2 lblPos(pPos.x + (labelColW - lblSz.x) * 0.5f, pPos.y + (pillH - lblSz.y) * 0.5f);
+
+                if (isSelected) DrawBoldText(drawList, lblPos, IM_COL32(255, 255, 255, (int)(255.0f * alpha)), rows[i].label.c_str());
+                else drawList->AddText(lblPos, IM_COL32(40, 55, 70, (int)(240.0f * alpha)), rows[i].label.c_str());
+                ImGui::SetWindowFontScale(1.0f);
+
+                float innerBoxW = 224.0f * scale;
+                float innerBoxH = pillH - 6.0f;
+                ImVec2 innerPos(pPos.x + pillW - innerBoxW - 6.0f, pPos.y + 3.0f);
+
+                ImU32 innerBg = isSelected ? IM_COL32(0, 155, 170, (int)(235.0f * alpha)) : IM_COL32(198, 208, 216, (int)(220.0f * alpha));
+                drawList->AddRectFilled(innerPos, ImVec2(innerPos.x + innerBoxW, innerPos.y + innerBoxH), innerBg, innerBoxH * 0.5f);
+
+                std::string valStr = rows[i].value;
+                ImVec2 valSz = ImGui::CalcTextSize(valStr.c_str());
+                float valCenterX = innerPos.x + (innerBoxW * 0.5f);
+                ImU32 valCol = isSelected ? IM_COL32(255, 255, 255, (int)(255.0f * alpha)) : IM_COL32(30, 45, 60, (int)(240.0f * alpha));
+
+                drawList->AddText(ImVec2(valCenterX - (valSz.x * 0.5f), innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, valStr.c_str());
+
+                float arrowPulse = isSelected ? (std::sin(g_pulseTimer) * 1.5f) : 0.0f;
+                drawList->AddText(ImVec2(innerPos.x + 10.0f - arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, "<");
+                drawList->AddText(ImVec2(innerPos.x + innerBoxW - 18.0f + arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, ">");
+            }
+
+            if (!rows.empty() && g_selectedItem < (int)rows.size())
+            {
+                const auto& item = rows[g_selectedItem];
+                float helpCenterY = center.y + curH - (item.help_line2.empty() ? 54.0f : 64.0f);
+
+                ImVec2 h1Sz = ImGui::CalcTextSize(item.help_line1.c_str());
+                DrawBoldText(drawList, ImVec2(center.x + (curW - h1Sz.x) * 0.5f, helpCenterY), IM_COL32(50, 70, 85, (int)(250.0f * alpha)), item.help_line1.c_str());
+
+                if (!item.help_line2.empty()) {
+                    ImVec2 h2Sz = ImGui::CalcTextSize(item.help_line2.c_str());
+                    DrawBoldText(drawList, ImVec2(center.x + (curW - h2Sz.x) * 0.5f, helpCenterY + 16.0f), IM_COL32(50, 70, 85, (int)(250.0f * alpha)), item.help_line2.c_str());
+                }
+            }
+
+            float pageY = center.y + curH - 30.0f;
+            std::string pageStr = util::Format("<   %d / %d   >", g_currentPage + 1, TotalPages);
+            ImVec2 pageSz = ImGui::CalcTextSize(pageStr.c_str());
+            DrawBoldText(drawList, ImVec2(center.x + (curW - pageSz.x) * 0.5f, pageY), IM_COL32(0, 160, 185, (int)(255.0f * alpha)), pageStr.c_str());
+
+            drawList->AddText(ImVec2(center.x + 36.0f, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[L]");
+            drawList->AddText(ImVec2(center.x + curW - 56.0f, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[R]");
+
+            drawList->PopClipRect();
+        }
+        ImGui::End();
+    }
+
+    // 1. Task Init (0x778930): Preloads sound farcs into memory on menu entrance
+    HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskInitHook) {
+        static uint64_t Callback(uint64_t a1) {
+            uint64_t res = Orig(a1);
+            s_inCustomizeScene = true;
+            sound::RequestFarcLoad("rom/sound/se_nc.farc");
+            sound::RequestFarcLoad("rom/sound/se_nc_option.farc");
+            return res;
+        }
+    };
+
+    // 2. Task Ctrl (0x778980): Wait for assets to load
+    HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskCtrlHook) {
+        static uint64_t Callback(uint64_t a1) {
+            if (!s_assetsLoaded)
+            {
+                s_assetsLoaded = !sound::IsFarcLoading("rom/sound/se_nc.farc") &&
+                                 !sound::IsFarcLoading("rom/sound/se_nc_option.farc");
+            }
+            return Orig(a1);
+        }
+    };
+
+    // 3. Task Dest (0x778990): Unloads sound farcs on exit
+    HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskDestHook) {
+        static uint64_t Callback(uint64_t a1) {
+            s_inCustomizeScene = false;
+            s_assetsLoaded = false;
+            ForceClose();
+            return Orig(a1);
+        }
+    };
+
+    // 4. CSTopMenuMainCtrl Hook (0x7a9370)
+    HOOK_DEFINE_TRAMPOLINE(CSTopMenuMainCtrlHook) {
+        static uint64_t Callback(uint64_t a1) {
+            s_inCustomizeScene = true;
+            CustomizeSelUi::Update();
+
+            if (CustomizeSelUi::IsOpen()) {
+                return 1;
+            }
+
+            return Orig(a1);
+        }
+    };
+
+    void Init()
+    {
+        CustomizeSelTaskInitHook::InstallAtOffset(0x778930);
+        CustomizeSelTaskCtrlHook::InstallAtOffset(0x778980);
+        CustomizeSelTaskDestHook::InstallAtOffset(0x778990);
+        CSTopMenuMainCtrlHook::InstallAtOffset(0x7a9370);
+
+        // lights perhaps slider controller x13 nullptr fix
+        exl::patch::CodePatcher(0x00601eb0).Write<uint32_t>(0x14000028);
+    }
 }

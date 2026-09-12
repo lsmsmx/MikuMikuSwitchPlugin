@@ -30,23 +30,6 @@ bool Config::ExPatch = true;
 bool Config::enableTouch = false;
 bool Config::enableKeyboard = false;
 
-// Page 1/3
-int8_t  Config::ncSustainSe = -1;
-int8_t  Config::ncDoubleSe = 1;
-int8_t  Config::ncStarSe = 1;
-int8_t  Config::ncLinkSe = -1;
-int8_t  Config::ncDStarSe = 1;
-
-// Page 2/3
-int32_t Config::ncTechZoneDisplay = 1;
-int32_t Config::ncTechZoneSoundPrio = 1;
-
-// Page 3/3
-int32_t Config::ncStickSensitivity = 50;
-uint8_t Config::ncFlickControlSe = 0;
-int32_t Config::ncSoundPrio = 0;
-int32_t Config::ncStarControl = 0;
-
 // Graphics
 bool Config::disableAdp = false;
 bool Config::enableSss = false;
@@ -145,30 +128,6 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# Menus: Esc (B), Enter/P (+), Tab (-)\n";
     tomlContent += "enable_keyboard = " + std::string(Config::enableKeyboard ? "true" : "false") + "\n\n";
 
-    tomlContent += "[new_classics]\n";
-    tomlContent += "# Sustain (Rush) SE ID: -1 = Default/Off, 1 = Sustain A, 2 = Sustain B, 3 = C, 4 = D, 5 = E\n";
-    tomlContent += "sustain_se_id = " + std::to_string(Config::ncSustainSe) + "\n";
-    tomlContent += "# Double SE ID: -1 = Inherit, 1 = Double A, 2 = Double B, 3 = C, 4 = D, 5 = E\n";
-    tomlContent += "double_se_id = " + std::to_string(Config::ncDoubleSe) + "\n";
-    tomlContent += "# Star SE ID: 1 = Star A .. 9 = Star I\n";
-    tomlContent += "star_se_id = " + std::to_string(Config::ncStarSe) + "\n";
-    tomlContent += "# Link Star SE ID: -1 = Same as Star, 1 = Link A .. 5 = Link E\n";
-    tomlContent += "link_se_id = " + std::to_string(Config::ncLinkSe) + "\n";
-    tomlContent += "# Double Star (D-Star) SE ID: -1 = Same as Star, 1 = D-Star A .. 5 = D-Star E\n";
-    tomlContent += "dstar_se_id = " + std::to_string(Config::ncDStarSe) + "\n";
-    tomlContent += "# Technical Zone Display: 0 = Off, 1 = Console/Mixed Only, 2 = Always\n";
-    tomlContent += "tech_zone_display = " + std::to_string(Config::ncTechZoneDisplay) + "\n";
-    tomlContent += "# Technical Zone Display Style: 0 = F, 1 = F 2nd, 2 = X, 3 = Future Tone, 6 = Mega Mix+, 20 = Match UI\n";
-    tomlContent += "tech_zone_sound_priority = " + std::to_string(Config::ncTechZoneSoundPrio) + "\n";
-    tomlContent += "# Stick Sensitivity for Star notes: integer percentage from 20 to 80 (Default: 30)\n";
-    tomlContent += "stick_sensitivity = " + std::to_string(Config::ncStickSensitivity) + "\n";
-    tomlContent += "# Flick Control SE: 0 = Slide, 1 = Star, 2 = Off\n";
-    tomlContent += "flick_control_se = " + std::to_string(Config::ncFlickControlSe) + "\n";
-    tomlContent += "# General Sound Priority: 0 = Disabled, 1 = F 2nd, 2 = Arcade, 3 = Console\n";
-    tomlContent += "sound_priority = " + std::to_string(Config::ncSoundPrio) + "\n";
-    tomlContent += "# Star Control Mode: 0 = Sticks Only, 1 = Buttons Only, 2 = Both\n";
-    tomlContent += "star_control = " + std::to_string(Config::ncStarControl) + "\n\n";
-
     tomlContent += "[graphics]\n";
     tomlContent += "# NOTE: for best looking graphics use dock/fakedock mode using ReverseNX + -no_npr in args.txt\n";
     tomlContent += "# Disables ADP (Adaptive Performance) system completely\n";
@@ -252,8 +211,9 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "#   - Hold L3 + R3 (0.8s)      : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
     tomlContent += "#   - Hold L3 + R3 + ZL (0.8s) : Toggle BSS RAM Overlay\n";
     tomlContent += "#   - Hold L3 + R3 + ZR (0.8s) : Toggle Resolution Scaler Overlay\n";
-    tomlContent += "#   - Click L3 (in BSS Gaps)   : Rescan RAM\n";
+    tomlContent += "#   - L3 (in RAM Overlay)      : Rescan RAM\n";
     tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
+    tomlContent += "#   - ZL in cstm menu          : Toggle New Classics Options window\n";
     tomlContent += "# [ FREECAM ]\n";
     tomlContent += "#   - L + R + Minus            : Toggle Freecam\n";
     tomlContent += "#   - D-Pad                    : Move Forward / Back / Left / Right\n";
@@ -350,27 +310,6 @@ bool Config::init() {
             enableKeyboard = config["gameplay"]["enable_keyboard"].value_or(false);
 
             nn::hid::g_keyboardModeEnabled = enableKeyboard;
-
-            if (config["new_classics"]) {
-                auto nc = config["new_classics"];
-
-                // Page 1/3: Sound Config
-                ncSustainSe = (int8_t)nc["sustain_se_id"].value_or(-1);
-                ncDoubleSe  = (int8_t)nc["double_se_id"].value_or(1);
-                ncStarSe    = (int8_t)nc["star_se_id"].value_or(1);
-                ncLinkSe    = (int8_t)nc["link_se_id"].value_or(-1);
-                ncDStarSe   = (int8_t)nc["dstar_se_id"].value_or(1);
-
-                // Page 2/3: Technical Zone Settings
-                ncTechZoneDisplay   = (int32_t)nc["tech_zone_display"].value_or(1);
-                ncTechZoneSoundPrio = (int32_t)nc["tech_zone_sound_priority"].value_or(1);
-
-                // Page 3/3: Other Settings
-                ncStickSensitivity = (int32_t)nc["stick_sensitivity"].value_or(50);
-                ncFlickControlSe   = (uint8_t)nc["flick_control_se"].value_or(0);
-                ncSoundPrio        = (int32_t)nc["sound_priority"].value_or(0);
-                ncStarControl      = (int32_t)nc["star_control"].value_or(0);
-            }
 
             // Graphics
             disableAdp = config["graphics"]["disable_adp"].value_or(false);

@@ -7,6 +7,7 @@
 
 #include "lib.hpp"
 #include "diva_nc.hpp"
+#include "save_data.hpp"
 #include "input.hpp"
 #include "logger.hpp"
 #include "../hid.hpp"
@@ -302,13 +303,54 @@ void MacroState::UpdateSticks(diva_nc::InputState* input_state, const std::chron
 
 bool MacroState::GetStarHit() const
 {
-	return buttons[Button_LStick].IsTapped() || buttons[Button_RStick].IsTapped();
+	// NOTE: Fetch Star Control setting (0: Sticks Only, 1: Buttons Only, 2: Both)
+	int32_t star_control = *reinterpret_cast<const int32_t*>(&nc::GetSharedData().reserved[0]);
+
+	// NOTE: Evaluate stick inputs
+	bool hit_stick = buttons[Button_LStick].IsTapped() || buttons[Button_RStick].IsTapped();
+
+	// NOTE: Evaluate button inputs (D-Pad + Action Buttons)
+	bool hit_button = false;
+	if (star_control == 1 || star_control == 2)
+	{
+		uint64_t main_mask = GetMainButtonsMask();
+		hit_button = (GetTappedBitfield() & main_mask) != 0;
+	}
+
+	if (star_control == 0) return hit_stick;
+	if (star_control == 1) return hit_button;
+	if (star_control == 2) return hit_stick || hit_button;
+
+	return false;
 }
 
 bool MacroState::GetDoubleStarHit() const
 {
-	return (buttons[Button_LStick].IsTapped() && buttons[Button_RStick].IsDown()) ||
-		(buttons[Button_RStick].IsTapped() && buttons[Button_LStick].IsDown());
+	// NOTE: Fetch Star Control setting
+	int32_t star_control = *reinterpret_cast<const int32_t*>(&nc::GetSharedData().reserved[0]);
+
+	// NOTE: Evaluate stick inputs (Both sticks flicked simultaneously)
+	bool hit_stick = (buttons[Button_LStick].IsTapped() && buttons[Button_RStick].IsTappedInNearFrames()) ||
+					 (buttons[Button_RStick].IsTapped() && buttons[Button_LStick].IsTappedInNearFrames());
+
+	// NOTE: Evaluate button inputs (Any 2 main buttons pressed simultaneously)
+	bool hit_button = false;
+	if (star_control == 1 || star_control == 2)
+	{
+		int32_t tapped_count = 0;
+		for (int32_t i = 0; i < 8; i++) // NOTE: Check 4 D-Pad arrows and 4 Action buttons
+		{
+			if (buttons[i].IsTapped() || buttons[i].IsTappedInNearFrames())
+				tapped_count++;
+		}
+		hit_button = (tapped_count >= 2);
+	}
+
+	if (star_control == 0) return hit_stick;
+	if (star_control == 1) return hit_button;
+	if (star_control == 2) return hit_stick || hit_button;
+
+	return false;
 }
 
 HOOK_DEFINE_TRAMPOLINE(PollInputRepeatAndDoubleHook) {

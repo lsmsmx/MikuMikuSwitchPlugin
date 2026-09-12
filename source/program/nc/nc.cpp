@@ -19,8 +19,6 @@ namespace nc {
 
         if (!Config::enableNewClassics) return;
 
-        nc::ApplyConfig();
-
         game::init();
         input::init();
         db::init();
@@ -30,7 +28,7 @@ namespace nc {
         mod_nc::init();
 
         pvsel::init();
-        //customize_sel::init();
+        CustomizeSelUi::Init();
         results::init();
 
         nc::init_save_data();

@@ -33,43 +33,15 @@ extern std::recursive_mutex g_SaveMtx;
 
 namespace nc
 {
-	void ApplyConfig() {
-		std::scoped_lock lock(g_SaveMtx);
-        shared_data.stick_sensitivity = Config::ncStickSensitivity;
-        shared_data.stick_control_se  = Config::ncFlickControlSe;
-        shared_data.sound_prio        = Config::ncSoundPrio;
-        shared_data.tech_zone_style   = Config::ncTechZoneDisplay;
-
-        *reinterpret_cast<int32_t*>(&shared_data.reserved[0]) = Config::ncStarControl;
-        *reinterpret_cast<int32_t*>(&shared_data.reserved[4]) = Config::ncTechZoneSoundPrio;
-
-        for (int32_t id = -3; id <= 0; id++) {
-            if (auto* set = FindConfigSet(id, true)) {
-                set->rush_se_id      = Config::ncSustainSe;
-                set->button_w_se_id  = Config::ncDoubleSe;
-                set->star_se_id      = Config::ncStarSe;
-                set->link_se_id      = Config::ncLinkSe;
-                set->star_w_se_id    = Config::ncDStarSe;
-                set->tech_zone_style = (int8_t)Config::ncTechZoneDisplay;
-            }
-        }
-    }
 
 	ConfigSet* FindConfigSet(int32_t id, bool create_if_missing)
 	{
-		std::scoped_lock lock(g_SaveMtx);
 		if (auto it = config_sets.find(id); it != config_sets.end())
 			return &it->second;
 		else if (create_if_missing)
 		{
-			auto& set = config_sets[id];
-			set.rush_se_id      = Config::ncSustainSe;
-			set.button_w_se_id  = Config::ncDoubleSe;
-			set.star_se_id      = Config::ncStarSe;
-			set.link_se_id      = Config::ncLinkSe;
-			set.star_w_se_id    = Config::ncDStarSe;
-			set.tech_zone_style = (int8_t)Config::ncTechZoneDisplay;
-			return &set;
+			config_sets[id] = { };
+			return &config_sets[id];
 		}
 
 		return nullptr;
@@ -106,7 +78,7 @@ namespace nc
 
 	int32_t GetConfigSetID()
 	{
-		int32_t set = *reinterpret_cast<int32_t*>(game::GetSaveData() + 0x169410);
+		int32_t set = *reinterpret_cast<int32_t*>(game::GetSaveData() + 0x151E08); // switch specific
 		return set < 3 ? -(set + 1) : game::GetGlobalPvID();
 	}
 

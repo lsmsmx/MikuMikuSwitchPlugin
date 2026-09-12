@@ -71,10 +71,6 @@ void SoundEffectManager::EndLongSE(bool fail)
 		sound::PlaySoundEffect(QueueIndex, l_button_off.c_str(), 1.0f);
 }
 
-void SoundEffectManager::TickLongSE()
-{
-}
-
 void SoundEffectManager::StartRushBackSE() { sound::PlaySoundEffect(QueueIndex, rush_on.c_str(), 1.0f); }
 
 void SoundEffectManager::EndRushBackSE(bool popped)

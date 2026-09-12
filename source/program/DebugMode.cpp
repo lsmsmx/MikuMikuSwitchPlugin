@@ -187,8 +187,22 @@ namespace DebugMode {
                 nn::hid::GetTouchScreenState(&ts);
 
                 if (ts.count > 0) {
-                    dis->MouseX = std::clamp((int32_t)((float)ts.touches[0].x * scaleX), 0, (int32_t)engineWidth - 1);
-                    dis->MouseY = std::clamp((int32_t)((float)ts.touches[0].y * scaleY), 0, (int32_t)engineHeight - 1);
+                    // Touchscreen bezel deadzone compensation
+                    // Fingers cannot physically hit raw 0 or 1279 due to finger pad radius
+                    const float marginX = 35.0f; // ~5-6mm horizontal bezel offset
+                    const float marginY = 25.0f; // ~4-5mm vertical bezel offset
+
+                    // Normalize touch to 0.0 .. 1.0 with deadzone expansion
+                    float normX = ((float)ts.touches[0].x - marginX) / (1280.0f - (2.0f * marginX));
+                    float normY = ((float)ts.touches[0].y - marginY) / (720.0f - (2.0f * marginY));
+
+                    // Clamp normalized values to true screen bounds
+                    normX = std::clamp(normX, 0.0f, 1.0f);
+                    normY = std::clamp(normY, 0.0f, 1.0f);
+
+                    // Project directly to the active engine resolution
+                    dis->MouseX = (int32_t)(normX * (float)(engineWidth - 1));
+                    dis->MouseY = (int32_t)(normY * (float)(engineHeight - 1));
 
                     s_touchFrames++;
                     if (ts.count > s_maxFingersThisSession) {
