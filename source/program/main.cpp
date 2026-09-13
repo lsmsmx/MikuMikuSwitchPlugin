@@ -52,7 +52,6 @@ HOOK_DEFINE_TRAMPOLINE(MainHook) {
         ImGui::Init();
 
         nc::init();
-        nc::ApplyConfig();
         shared_hooks::init();
 
         keyboard_sliders::init();

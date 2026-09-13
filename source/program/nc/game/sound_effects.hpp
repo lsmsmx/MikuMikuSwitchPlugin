@@ -27,7 +27,6 @@ public:
 	void PlayStarDoubleSE();
 	void StartLongSE();
 	void EndLongSE(bool fail);
-	void TickLongSE();
 	void StartRushBackSE();
 	void EndRushBackSE(bool popped);
 	void StartLinkSE();

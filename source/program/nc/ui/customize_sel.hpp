@@ -1,12 +1,29 @@
 #pragma once
 
-void InstallCustomizeSelHooks();
+#include <stdint.h>
 
-namespace customize_sel
+namespace CustomizeSelUi
 {
-	void ShowWindow();
+    enum class AnimState
+    {
+        Closed,
+        Opening,
+        Open,
+        Closing
+    };
 
-	inline void init() {
-		InstallCustomizeSelHooks();
-	}
+    bool IsOpen();
+    void Open();
+    void Close();
+    void ForceClose();
+    void Toggle();
+
+    // Installs the game lifecycle hooks (called during mod initialization)
+    void Init();
+
+    // Main control loop (called strictly inside CSTopMenuMainCtrl)
+    void Update();
+
+    // ImGui drawing routine (called inside nvnImguiCalc)
+    void Draw();
 }

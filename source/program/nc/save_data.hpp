@@ -42,7 +42,6 @@ static_assert(sizeof(SharedData) == 256, "SharedData struct size mismatch.");
 
 namespace nc
 {
-	void ApplyConfig();
 	ConfigSet* FindConfigSet(int32_t id, bool create_if_missing = true);
 	void CreateDefaultSaveData();
 	SharedData& GetSharedData();

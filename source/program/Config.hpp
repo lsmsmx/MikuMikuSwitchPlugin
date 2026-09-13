@@ -24,23 +24,6 @@ struct Config {
     static bool enableTouch;
     static bool enableKeyboard;
 
-    // Page 1/3 (5 items)
-    static int8_t  ncSustainSe;
-    static int8_t  ncDoubleSe;
-    static int8_t  ncStarSe;
-    static int8_t  ncLinkSe;
-    static int8_t  ncDStarSe;
-
-    // Page 2/3 (2 items)
-    static int32_t ncTechZoneDisplay;
-    static int32_t ncTechZoneSoundPrio;
-
-    // Page 3/3 (4 items)
-    static int32_t ncStickSensitivity;
-    static uint8_t ncFlickControlSe;
-    static int32_t ncSoundPrio;
-    static int32_t ncStarControl;
-
     // Graphics
     static bool disableAdp;
     static bool enableSss;

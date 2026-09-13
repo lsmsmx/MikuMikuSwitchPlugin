@@ -17,6 +17,7 @@
 #include "StateSwitcher.hpp"
 #include "MemoryScannerUi.hpp"
 #include "ResScalerUI.hpp"
+#include "nc/ui/customize_sel.hpp"
 
 #ifndef IMNVNFUNC
 #define IMNVNFUNC __attribute__((visibility("default")))
@@ -602,7 +603,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     s_f10WasDown = isF10Down;
 
     bool overlayVisible = InputOverlay::IsVisible();
-    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow;
+    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow || CustomizeSelUi::IsOpen();
 
     if (!anyUiOpen && !overlayVisible) {
         ImGui::mikuposptrcounter = -1;
@@ -905,6 +906,9 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     // Unified Overlay Call
     InputOverlay::Draw();
+
+    // CustomizeSel
+    CustomizeSelUi::Draw();
 
     ImGui::Render();
 

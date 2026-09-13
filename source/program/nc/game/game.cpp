@@ -191,7 +191,6 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 						is_in_zone = time >= game->sad_late_window && time <= game->sad_early_window;
 					}
 
-					se_mgr.TickLongSE();
 					score::CalculateSustainBonus(tgt);
 					addTargetScoreDisp(tgt);
 

@@ -7,6 +7,7 @@
 
 #include "lib.hpp"
 #include "diva_nc.hpp"
+#include "save_data.hpp"
 #include "input.hpp"
 #include "logger.hpp"
 #include "../hid.hpp"
@@ -113,7 +114,7 @@ bool ButtonState::IsTappedInNearFrames() const
 	if (count == 0) return false;
 	for (size_t i = 0; i < count; i++)
 	{
-		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - data[i].time).count() > 200)
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - data[i].time).count() > 50)
 			return false;
 
 		if (data[i].tapped)
@@ -244,71 +245,117 @@ bool MacroState::IsRawReleased(int32_t button) const
 
 void MacroState::UpdateSticks(diva_nc::InputState* input_state, const std::chrono::steady_clock::time_point& time)
 {
-	auto checkDeadzoned = [&](const diva_nc::vec2& pos)
-	{
-		return pos.x <= stick_deadzone.x && pos.y <= stick_deadzone.y
-			&& pos.x >= -stick_deadzone.x && pos.y >= -stick_deadzone.y;
-	};
+    auto checkDeadzoned = [&](const diva_nc::vec2& pos)
+    {
+        // Radial circular deadzone instead of an axis-aligned box
+        return pos.length() <= stick_deadzone.x;
+    };
 
-	auto updateStick = [&](int32_t index)
-	{
-		StickState* state = &sticks[index];
+    auto updateStick = [&](int32_t index)
+    {
+        StickState* state = &sticks[index];
 
-		// Switch analog stick position indices
-		int32_t baseIndex = (index == 0) ? 0x0E : 0x10;
+        // Switch analog stick position indices (0x0E = 14: LStick, 0x10 = 16: RStick)
+        int32_t baseIndex = (index == 0) ? 0x0E : 0x10;
 
-		int32_t rawX = input_state->GetPosition(baseIndex + 0);
-		int32_t rawY = input_state->GetPosition(baseIndex + 1);
+        int32_t rawX = input_state->GetPosition(baseIndex + 0);
+        int32_t rawY = input_state->GetPosition(baseIndex + 1);
 
-		diva_nc::vec2 pos = {
-			static_cast<float>(rawX) / 32767.0f,
-			static_cast<float>(-(rawY)) / 32767.0f
-		};
+        diva_nc::vec2 pos = {
+            static_cast<float>(rawX) / 32767.0f,
+            static_cast<float>(-(rawY)) / 32767.0f
+        };
 
-		state->prev_distance = state->distance;
-		state->distance = checkDeadzoned(pos) ? 0.0f : pos.length();
-		state->flicked = (state->distance >= sensivity) && (state->prev_distance < sensivity);
-		state->returning = state->distance < state->prev_distance;
+        state->prev_distance = state->distance;
+        state->distance = checkDeadzoned(pos) ? 0.0f : pos.length();
+        state->returning = state->distance < state->prev_distance;
+        state->flicked = false;
 
-		if (!state->returning)
-		{
-			state->flicked = state->distance >= sensivity && !state->flick_block;
-			if (state->flicked)
-				state->flick_block = true;
-		}
-		else
-		{
-			if (state->distance < sensivity)
-				state->flick_block = false;
-		}
-	};
+        if (!state->returning)
+        {
+            // Register flick only when moving AWAY from center past the sensitivity threshold
+            if (state->distance >= sensivity && !state->flick_block)
+            {
+                state->flicked = true;
+                state->flick_block = true;
+            }
+        }
+        else
+        {
+            if (state->distance < std::min(sensivity * 0.6f, 0.25f))
+            {
+                state->flick_block = false;
+            }
+        }
+    };
 
-	auto updateStickButtonState = [&](int32_t index)
-	{
-		StickState* state = &sticks[index];
-		auto& button = buttons[Button_LStick + index].data[0];
+    auto updateStickButtonState = [&](int32_t index)
+    {
+        StickState* state = &sticks[index];
+        auto& button = buttons[Button_LStick + index].data[0];
 
-		button.down = state->distance >= sensivity;
-		button.up = !button.down;
-		button.tapped = state->flicked;
-		button.time = time;
-	};
+        button.down = state->distance >= sensivity;
+        button.up = !button.down;
+        button.tapped = state->flicked;
+        button.time = time;
+    };
 
-	updateStick(Stick_L);
-	updateStick(Stick_R);
-	updateStickButtonState(Stick_L);
-	updateStickButtonState(Stick_R);
+    updateStick(Stick_L);
+    updateStick(Stick_R);
+    updateStickButtonState(Stick_L);
+    updateStickButtonState(Stick_R);
 }
 
 bool MacroState::GetStarHit() const
 {
-	return buttons[Button_LStick].IsTapped() || buttons[Button_RStick].IsTapped();
+	// NOTE: Fetch Star Control setting (0: Sticks Only, 1: Buttons Only, 2: Both)
+	int32_t star_control = *reinterpret_cast<const int32_t*>(&nc::GetSharedData().reserved[0]);
+
+	// NOTE: Evaluate stick inputs
+	bool hit_stick = buttons[Button_LStick].IsTapped() || buttons[Button_RStick].IsTapped();
+
+	// NOTE: Evaluate button inputs (D-Pad + Action Buttons)
+	bool hit_button = false;
+	if (star_control == 1 || star_control == 2)
+	{
+		uint64_t main_mask = GetMainButtonsMask();
+		hit_button = (GetTappedBitfield() & main_mask) != 0;
+	}
+
+	if (star_control == 0) return hit_stick;
+	if (star_control == 1) return hit_button;
+	if (star_control == 2) return hit_stick || hit_button;
+
+	return false;
 }
 
 bool MacroState::GetDoubleStarHit() const
 {
-	return (buttons[Button_LStick].IsTapped() && buttons[Button_RStick].IsDown()) ||
-		(buttons[Button_RStick].IsTapped() && buttons[Button_LStick].IsDown());
+	// NOTE: Fetch Star Control setting
+	int32_t star_control = *reinterpret_cast<const int32_t*>(&nc::GetSharedData().reserved[0]);
+
+	// NOTE: Evaluate stick inputs (Both sticks flicked simultaneously)
+	bool hit_stick = (buttons[Button_LStick].IsTapped() && (buttons[Button_RStick].IsDown() || buttons[Button_RStick].IsTappedInNearFrames())) ||
+					 (buttons[Button_RStick].IsTapped() && (buttons[Button_LStick].IsDown() || buttons[Button_LStick].IsTappedInNearFrames()));
+
+	// NOTE: Evaluate button inputs (Any 2 main buttons pressed simultaneously)
+	bool hit_button = false;
+	if (star_control == 1 || star_control == 2)
+	{
+		int32_t tapped_count = 0;
+		for (int32_t i = 0; i < 8; i++) // NOTE: Check 4 D-Pad arrows and 4 Action buttons
+		{
+			if (buttons[i].IsTapped() || buttons[i].IsTappedInNearFrames())
+				tapped_count++;
+		}
+		hit_button = (tapped_count >= 2);
+	}
+
+	if (star_control == 0) return hit_stick;
+	if (star_control == 1) return hit_button;
+	if (star_control == 2) return hit_stick || hit_button;
+
+	return false;
 }
 
 HOOK_DEFINE_TRAMPOLINE(PollInputRepeatAndDoubleHook) {

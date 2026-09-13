@@ -30,7 +30,6 @@ extern void ResetJitLinks(); // Forward declaration from target.cpp
 // 1. TaskPvGameInit (0x64c910)
 HOOK_DEFINE_TRAMPOLINE(TaskPvGameInitHook) {
 	static bool Callback(uint64_t a1) {
-		nc::ApplyConfig();
 		state.files_loaded = false;
 		state.dsc_loaded = false;
 		state.file_state = 0;

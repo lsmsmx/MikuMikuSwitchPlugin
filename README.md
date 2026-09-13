@@ -99,14 +99,15 @@ Hotkeys:
 -------------------------------------------------------------------------------------------------------------------------
 
 # New Classics
-- Playalable port of New Classics, except of customization menu which seems to need asset change
+- Playalable port of New Classics
 - Chart packs or nc song packs load the same
 - Specific aet hit sounds dont work, it needs an id from mod_aet_db.bin to put instead of name
-- NC Settings change through config.toml
+- NC Settings - go to customization menu and press ZL to change. Fully ported to ImGUI
+
 
 -------------------------------------------------------------------------------------------------------------------------
 
-# ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher, .bss overlay, Resolution Scale Overlay:
+# ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher, .bss overlay, Resolution Scale Overlay, NC Options:
 - ImGui interface can be toggled by pressing "+" & "-" for second
 - InputOverlay can be toggled and changed (2 modes: keyboard and joycons)
 - The controls are pretty much the same as in debug, including a mouse movement speed increase by holding Y button
@@ -118,6 +119,7 @@ Hotkeys:
 - Change Substates within the menu
 - .bss free RAM overlay with update button, enable with pressing L3+R3+ZL for a second. Update with L3 while in menu
 - Dynamic Resolution Overlay - press L3+R3+ZR for a second, touch to use presets
+- New Classics window toggled with ZL
 
 
 -------------------------------------------------------------------------------------------------------------------------
