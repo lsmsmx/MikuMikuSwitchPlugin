@@ -42,6 +42,9 @@ float Config::shadowIntensity = 1.0f;
 float Config::reflectionQuality = 1.0f;
 float Config::exposure = -1.0f;
 float Config::gamma = -1.0f;
+int Config::toneMapMethod = -1;
+float Config::saturateCoef = -1.0f;
+float Config::exposurePse = -1.0f;
 float Config::fxaaQualitySubpix = -1.0f;
 float Config::fxaaQualityEdgeThreshold = -1.0f;
 float Config::fxaaQualityEdgeThresholdMin = -1.0f;
@@ -125,7 +128,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# Left Stick: Q, E (Left / Right)\n";
     tomlContent += "# Right Stick: U, O (Left / Right)\n";
     tomlContent += "# Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/CapsLock (ZL), RightCtrl/,/;/Spacebar (ZR)\n";
-    tomlContent += "# Menus: Esc (B), Enter/P (+), Tab (-)\n";
+    tomlContent += "# Menus: Esc/Enter/P (+), Tab (-), BackSpace (B)\n";
     tomlContent += "enable_keyboard = " + std::string(Config::enableKeyboard ? "true" : "false") + "\n\n";
 
     tomlContent += "[graphics]\n";
@@ -152,8 +155,14 @@ static void SaveConfig(const std::string& path) {
 
     tomlContent += "# Exposure value multiplier: 0.0 to 4.0 (Default -1.0)\n";
     tomlContent += "exposure = " + std::to_string(Config::exposure) + "\n";
-    tomlContent += "# Gamma correction: 0.0 to 1.0 (Set to -1.0 for game default)\n";
+    tomlContent += "# Gamma correction: 0.0 to 2.0 (Set to -1.0 for game default)\n";
     tomlContent += "gamma = " + std::to_string(Config::gamma) + "\n";
+    tomlContent += "# Tone Map Method: -1 (game default), 0 (YCC EXPONENT), 1 (RGB LINEAR), 2 (RGB LINEAR2), 3 (OFF)\n";
+    tomlContent += "tone_map_method = " + std::to_string(Config::toneMapMethod) + "\n";
+    tomlContent += "# Saturate Coef: 0.0 to 1.0 (-1.0 for game default)\n";
+    tomlContent += "saturate_coef = " + std::to_string(Config::saturateCoef) + "\n";
+    tomlContent += "# PSE Exposure modifier scale: 0.0 to 1.0 (-1.0 for game default)\n";
+    tomlContent += "exposure_pse = " + std::to_string(Config::exposurePse) + "\n";
 
     tomlContent += "# FXAA Settings: 0.0 to 1.0 (Set to -1.0 for game default)\n";
     tomlContent += "fxaa_subpix = " + std::to_string(Config::fxaaQualitySubpix) + "\n";
@@ -210,7 +219,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "#   - ZL / ZR                  : Left Click / Right Click\n";
     tomlContent += "#   - Hold L3 + R3 (0.8s)      : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
     tomlContent += "#   - Hold L3 + R3 + ZL (0.8s) : Toggle BSS RAM Overlay\n";
-    tomlContent += "#   - Hold L3 + R3 + ZR (0.8s) : Toggle Resolution Scaler Overlay\n";
+    tomlContent += "#   - Hold L3 + R3 + ZR (0.8s) : Toggle Resolution Scaler & Post Processing Overlay\n";
     tomlContent += "#   - L3 (in RAM Overlay)      : Rescan RAM\n";
     tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
     tomlContent += "#   - ZL in cstm menu          : Toggle New Classics Options window\n";
@@ -319,6 +328,9 @@ bool Config::init() {
             ssaaMode = config["graphics"]["ssaa_mode"].value_or("off");
             exposure = (float)config["graphics"]["exposure"].value_or(-1.0f);
             gamma = (float)config["graphics"]["gamma"].value_or(-1.0f);
+            toneMapMethod = (int)config["graphics"]["tone_map_method"].value_or(-1);
+            saturateCoef  = (float)config["graphics"]["saturate_coef"].value_or(-1.0f);
+            exposurePse   = (float)config["graphics"]["exposure_pse"].value_or(-1.0f);
             fxaaQualitySubpix = (float)config["graphics"]["fxaa_subpix"].value_or(-1.0f);
             fxaaQualityEdgeThreshold = (float)config["graphics"]["fxaa_edge_threshold"].value_or(-1.0f);
             fxaaQualityEdgeThresholdMin = (float)config["graphics"]["fxaa_edge_threshold_min"].value_or(-1.0f);

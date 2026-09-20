@@ -118,7 +118,7 @@ Hotkeys:
 - Mouth Focus Switch by holding ZR + ZL buttons for 0.5 seconds for quick switch between in-game debug and imgui window
 - Change Substates within the menu
 - .bss free RAM overlay with update button, enable with pressing L3+R3+ZL for a second. Update with L3 while in menu
-- Dynamic Resolution Overlay - press L3+R3+ZR for a second, touch to use presets
+- Dynamic Resolution & Post Processing Overlay - press L3+R3+ZR for a second, touch to use presets and change values (R for reset to game default)
 - New Classics window toggled with ZL
 
 
@@ -145,7 +145,7 @@ Hotkeys:
 - Left Stick: Q, E (Left / Right)
 - Right Stick: U, O (Left / Right)
 - Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/CapsLock (ZL), RightCtrl/,/;/Spacebar (ZR)
-- Menus: Esc (B), Enter/P (+), Tab (-)
+- Menus: Esc/Enter/P (+), Tab (-), BackSpace (B)
 
 
 -------------------------------------------------------------------------------------------------------------------------

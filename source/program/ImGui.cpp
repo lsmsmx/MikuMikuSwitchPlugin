@@ -17,6 +17,7 @@
 #include "StateSwitcher.hpp"
 #include "MemoryScannerUi.hpp"
 #include "ResScalerUI.hpp"
+#include "PostProcessUI.hpp"
 #include "nc/ui/customize_sel.hpp"
 
 #ifndef IMNVNFUNC
@@ -455,6 +456,7 @@ namespace ImGui {
     void Init() {
         RefreshFiles();
         MemoryScannerUi::Init();
+
         BonesUpdateHook::InstallAtOffset(ADDR_UPDATE_BONES);
     }
 }
@@ -568,6 +570,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         res_hold_timer += dt;
         if (res_hold_timer >= 0.8f && (res_hold_timer - dt) < 0.8f) {
             ResScalerUi::g_showWindow = !ResScalerUi::g_showWindow;
+            PostProcessUi::g_showWindow = ResScalerUi::g_showWindow; // Toggle together
             if (ResScalerUi::g_showWindow) {
                 ImGui::g_imguiHasFocus = true;
             }
@@ -603,7 +606,9 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     s_f10WasDown = isF10Down;
 
     bool overlayVisible = InputOverlay::IsVisible();
-    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow || CustomizeSelUi::IsOpen();
+    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer ||
+                    MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow ||
+                    PostProcessUi::g_showWindow || CustomizeSelUi::IsOpen();
 
     if (!anyUiOpen && !overlayVisible) {
         ImGui::mikuposptrcounter = -1;
@@ -615,6 +620,13 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     io.DisplaySize = ImVec2(1280.0f, 720.0f);
 
     bool isLeftClick = false, isRightClick = false, isTouchActive = false;
+
+    // Physical mouse activity tracking
+    static float s_mouseActivityTimer = 0.0f;
+    if (s_mouseActivityTimer > 0.0f) {
+        s_mouseActivityTimer -= dt;
+        if (s_mouseActivityTimer < 0.0f) s_mouseActivityTimer = 0.0f;
+    }
 
     // Direct hardware button reading
     bool isZLPressed = (npad.buttons & nn::hid::Button::ZL) != 0;
@@ -636,7 +648,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         }
     }
 
-    // Only update cursor position if ImGui currently has focus
+    // Only process inputs if ImGui currently has focus
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
         if (nn::hid::GetTouchScreenState) {
             nn::hid::TouchScreenState ts = {};
@@ -654,15 +666,27 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
+        // Poll physical USB mouse state
         if (nn::hid::GetMouseState && !isTouchActive) {
             nn::hid::MouseState ms = {};
             nn::hid::GetMouseState(&ms);
-            ImGui::g_cursorX += (float)ms.deltaX;
-            ImGui::g_cursorY += (float)ms.deltaY;
-            if (ms.buttons & 1) isLeftClick = true;
-            if (ms.buttons & 2) isRightClick = true;
+
+            // Detect actual physical mouse movement or clicks
+            if (ms.deltaX != 0 || ms.deltaY != 0 || ms.buttons != 0 || ms.wheelDeltaY != 0) {
+                ImGui::g_cursorX += (float)ms.deltaX;
+                ImGui::g_cursorY += (float)ms.deltaY;
+                if (ms.buttons & 1) isLeftClick = true;
+                if (ms.buttons & 2) isRightClick = true;
+                if (ms.wheelDeltaY != 0) {
+                    io.AddMouseWheelEvent(0.0f, static_cast<float>(ms.wheelDeltaY));
+                }
+
+                // Keep physical mouse active for 5 seconds after physical movement
+                s_mouseActivityTimer = 5.0f;
+            }
         }
 
+        // Analog stick navigation (for gamepad controls)
         if (!isTouchActive) {
             float lx = (float)npad.analogStickL[0] / 32767.0f;
             float ly = -(float)npad.analogStickL[1] / 32767.0f;
@@ -683,9 +707,26 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::g_cursorY = std::clamp(ImGui::g_cursorY, 0.0f, 720.0f);
     }
 
-    // True only if interactive tool windows are open (not just HUD overlay)
+    // 1. Full tool windows (Debug Menu, Motion Player) -> always draw cursor
     bool isFullWindowOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer;
-    bool shouldDrawCursor = isFullWindowOpen && ImGui::g_imguiHasFocus && !isTouchActive;
+
+    // 2. HUD Overlays (ResScaler, PostProcess Tuning)
+    bool isOverlayOpen = ResScalerUi::g_showWindow ||
+                         PostProcessUi::g_showWindow ||
+                         MemoryScannerUi::g_showWindow ||
+                         CustomizeSelUi::IsOpen();
+
+    // 3. Draw cursor rule:
+    // - Always for full debug menus (stick/mouse)
+    // - ONLY when a physical USB mouse was moved/clicked for overlays
+    bool shouldDrawCursor = false;
+    if (ImGui::g_imguiHasFocus && !isTouchActive) {
+        if (isFullWindowOpen) {
+            shouldDrawCursor = true;
+        } else if (isOverlayOpen && (s_mouseActivityTimer > 0.0f)) {
+            shouldDrawCursor = true; // Shows up only if physical mouse is actively used!
+        }
+    }
 
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
         io.AddMousePosEvent(ImGui::g_cursorX, ImGui::g_cursorY);
@@ -903,6 +944,9 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     // 7. RESOLUTION SCALER OVERLAY
     ResScalerUi::DrawWindow();
+
+    // 8. POST PROCESS OVERLAY
+    PostProcessUi::DrawWindow();
 
     // Unified Overlay Call
     InputOverlay::Draw();

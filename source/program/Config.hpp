@@ -36,6 +36,9 @@ struct Config {
     // Core Graphics Values
     static float exposure;
     static float gamma;
+    static int toneMapMethod;
+    static float saturateCoef;
+    static float exposurePse;
 
     // FXAA Settings
     static float fxaaQualitySubpix;
