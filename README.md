@@ -33,6 +33,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Saturation patch for my friend
 - AetDB fix port to prevent unnecessary memory allocations
 - SpriteDrawLimit memory allocations fix port for debug mode
+- Skip Logos patch
 - Bone Control through ImGUI
 - Record/Play recorded motions through ImGUI
 - Input Track Overlay through ImGUI
@@ -176,6 +177,7 @@ const char *possible_tids[] = {
 - Big thanks to ReDIVA reverse engineering https://github.com/korenkonder/ReDIVA
 - SpriteDrawLimit by https://github.com/korenkonder/MMPlusMods/tree/master/src/SpriteDrawLimit
 - AetDB fix by https://github.com/blueskythlikesclouds/DivaModLoader/pull/37
+- Skip logos patch original ips by bakonpancakz
 - Thanks to Dandy Bleat for help with New Classics
 
 

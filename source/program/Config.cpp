@@ -27,6 +27,7 @@ bool Config::disableLyrics = false;
 bool Config::forceJapanese = false;
 bool Config::forceFtUI = false;
 bool Config::ExPatch = true;
+bool Config::skipAdv = false;
 bool Config::enableTouch = false;
 bool Config::enableKeyboard = false;
 
@@ -120,6 +121,8 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "force_ft_ui = " + std::string(Config::forceFtUI ? "true" : "false") + "\n";
     tomlContent += "# ExPatch (unlocks Extreme charts by default)\n";
     tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n";
+    tomlContent += "# Skip all SEGA logos and intros srtaight to title screen\n";
+    tomlContent += "skipAdv = " + std::string(Config::skipAdv ? "true" : "false") + "\n";
     tomlContent += "# Touch-to-Sliders SUPPORT (two sticks all directions imitation with touchscreen)\n";
     tomlContent += "enable_touch = " + std::string(Config::enableTouch ? "true" : "false") + "\n";
     tomlContent += "# USB KEYBOARD SUPPORT\n";
@@ -315,6 +318,7 @@ bool Config::init() {
             forceJapanese = config["gameplay"]["force_japanese"].value_or(false);
             forceFtUI = config["gameplay"]["force_ft_ui"].value_or(false);
             ExPatch = config["gameplay"]["ExPatch"].value_or(true);
+            skipAdv = config["gameplay"]["skipAdv"].value_or(false);
             enableTouch = config["gameplay"]["enable_touch"].value_or(false);
             enableKeyboard = config["gameplay"]["enable_keyboard"].value_or(false);
 

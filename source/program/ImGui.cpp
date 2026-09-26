@@ -957,5 +957,12 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     ImGui::Render();
 
     ImGui::mikuposptrcounter = -1;
-    return ImGui::GetDrawData();
+
+    // fps drop fix to not initialize gpu
+    ImDrawData* drawData = ImGui::GetDrawData();
+    if (!drawData || drawData->CmdListsCount == 0 || drawData->TotalVtxCount == 0) {
+        return nullptr;
+    }
+
+    return drawData;
 }

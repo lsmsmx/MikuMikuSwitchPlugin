@@ -21,6 +21,7 @@ struct Config {
     static bool forceJapanese;
     static bool forceFtUI;
     static bool ExPatch;
+    static bool skipAdv;
     static bool enableTouch;
     static bool enableKeyboard;
 

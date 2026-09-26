@@ -42,6 +42,15 @@
 #define OFFSET_SATURATION_1       FIX(0x5D1B64)
 #define OFFSET_SATURATION_2       FIX(0x5D29B0)
 
+HOOK_DEFINE_TRAMPOLINE(TaskAdvLogo) {
+    static int Callback(void* this_ptr) {
+        if (Config::skipAdv) {
+            return 1;
+        }
+        return Orig(this_ptr);
+    }
+};
+
 inline void ApplyCustomPatches() {
 
     // Challenge Time Handling (3 Modes: "enabled", "disabled", "default")
@@ -59,6 +68,9 @@ inline void ApplyCustomPatches() {
     if (Config::ExPatch) {
         exl::patch::CodePatcher(ADDR_UNLOCK_PATCH).Write<uint32_t>(0x52800020);
     }
+
+    // TaskAdvLogo mov 1 and ret but hook cuz very early timings
+    TaskAdvLogo::InstallAtOffset(0x77ac0);
 
     // 1. Remove Copyright & PV Watermark
     if (Config::removeWatermarks) {

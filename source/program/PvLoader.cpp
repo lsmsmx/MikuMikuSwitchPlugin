@@ -6,8 +6,9 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "lib.hpp"
 #include "fs.hpp"
-#include "patches.hpp"
+#include "macros.hpp"
 #include "PvLoader.hpp"
 
 #define FIX(addr)           ((addr) - 0x100)
