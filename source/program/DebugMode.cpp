@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <nn/os.hpp>
 #include "ImGui.hpp"
-#include "InputOverlay.hpp"
+#include "overlays/InputOverlay.hpp"
 
 // =========================================================
 // ADDRESSES & CONSTANTS (NSO = Ghidra - 0x100)

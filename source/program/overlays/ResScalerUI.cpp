@@ -1,5 +1,5 @@
 #include "ResScalerUI.hpp"
-#include "Config.hpp"
+#include "../Config.hpp"
 #include "imgui/imgui_nvn.h"
 #include <hid.hpp>
 #include <lib.hpp>

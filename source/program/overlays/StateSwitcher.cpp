@@ -1,5 +1,5 @@
 #include "StateSwitcher.hpp"
-#include "DebugMode.hpp"
+#include "../DebugMode.hpp"
 #include "imgui/imgui_nvn.h"
 #include <cstddef>
 

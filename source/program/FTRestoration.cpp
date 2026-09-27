@@ -83,25 +83,47 @@ HOOK_DEFINE_TRAMPOLINE(SetMagFilterHook) {
     }
 };
 
-// 2. Gamma Setter (FUN_004a0150)
+// 2. Tone Map Setter Hook (0x004a0120)
+HOOK_DEFINE_TRAMPOLINE(SetToneMapMethodHook) {
+    static void Callback(uintptr_t render_ptr, int32_t method) {
+        if (Config::toneMapMethod >= 0) {
+            method = Config::toneMapMethod;
+        }
+        Orig(render_ptr, method);
+    }
+};
+
+// 3. Exposure Setter Hook (0x004a0130)
+HOOK_DEFINE_TRAMPOLINE(SetExposureHook) {
+    static void Callback(float exposure, uintptr_t render_ptr) {
+        if (Config::exposure >= 0.0f) {
+            exposure = Config::exposure;
+        }
+        Orig(exposure, render_ptr);
+    }
+};
+
+// 4. Gamma Setter Hook (0x004a0150)
 HOOK_DEFINE_TRAMPOLINE(SetGammaHook) {
     static void Callback(uintptr_t render_ptr, float gamma_val) {
-        if (Config::gamma != -1.0f) {
+        if (Config::gamma >= 0.0f) {
             gamma_val = Config::gamma;
         }
         Orig(render_ptr, gamma_val);
     }
 };
 
-// 3. Exposure Setter (0x4a0130)
-HOOK_DEFINE_TRAMPOLINE(SetExposureHook) {
-    static void Callback(float exposure, uintptr_t render_ptr) {
-        float target_exposure = (Config::exposure != -1.0f) ? Config::exposure : exposure;
-        Orig(target_exposure, render_ptr);
+// 5. PSE Modifier Setter Hook (0x004ae880)
+HOOK_DEFINE_TRAMPOLINE(SetPseModifierHook) {
+    static void Callback(uintptr_t render_ptr, float* scales) {
+        if (Config::exposurePse >= 0.0f && scales != nullptr) {
+            scales[0] = Config::exposurePse;
+        }
+        Orig(render_ptr, scales);
     }
 };
 
-// 4. FXAA Parameters Setter (FUN_004a0550)
+// 6. FXAA Parameters Setter (FUN_004a0550)
 HOOK_DEFINE_TRAMPOLINE(SetFxaaParamsHook) {
     static void Callback(uintptr_t render_ptr, float* params_array) {
         float new_params[3] = { params_array[0], params_array[1], params_array[2] };
@@ -116,6 +138,57 @@ HOOK_DEFINE_TRAMPOLINE(SetFxaaParamsHook) {
             new_params[2] = Config::fxaaQualityEdgeThresholdMin;
 
         Orig(render_ptr, new_params);
+    }
+};
+
+// 7. PSE Getter (0x004ae870)
+HOOK_DEFINE_TRAMPOLINE(GetPseModifierHook) {
+    static float* Callback(uintptr_t render_ptr) {
+        float* ptr = Orig(render_ptr);
+        if (ptr != nullptr && Config::exposurePse >= 0.0f) {
+            ptr[0] = Config::exposurePse;
+        }
+        return ptr;
+    }
+};
+
+// 8. SatCoef Getter (0x004a0b50)
+HOOK_DEFINE_TRAMPOLINE(GetSaturateCoefHook) {
+    static void Callback(uintptr_t render_ptr, float* out_val) {
+        Orig(render_ptr, out_val);
+        if (out_val != nullptr && Config::saturateCoef >= 0.0f) {
+            *out_val = Config::saturateCoef;
+        }
+    }
+};
+// 9. Hook for Render::tone_map (0x004a6cc0)
+HOOK_DEFINE_TRAMPOLINE(ToneMapHook) {
+    static void Callback(uintptr_t render_ptr, uintptr_t a2, uintptr_t a3) {
+        if (render_ptr) {
+            // Enforce Saturation 2 (+0x17f4) right before tone_map reads it at 0x004a6d48
+            if (Config::saturateCoef >= 0.0f) {
+                float* pSat = reinterpret_cast<float*>(render_ptr + 0x17f4);
+                if (*pSat != Config::saturateCoef) {
+                    *pSat = Config::saturateCoef;
+                    *reinterpret_cast<int32_t*>(render_ptr + 0x1288) = 1;
+                    *reinterpret_cast<int32_t*>(render_ptr + 0x1a3c) = 1;
+                }
+            }
+
+            // Enforce PSE Exposure Scale (+0xb70) right before tone_map reads it at 0x004a6edc
+            if (Config::exposurePse >= 0.0f) {
+                uintptr_t ctx = *reinterpret_cast<uintptr_t*>(render_ptr + 0x1a40);
+                if (ctx) {
+                    float* pPse = reinterpret_cast<float*>(ctx + 0xb70);
+                    if (*pPse != Config::exposurePse) {
+                        *pPse = Config::exposurePse;
+                        *reinterpret_cast<int32_t*>(render_ptr + 0x1288) = 1;
+                    }
+                }
+            }
+        }
+
+        Orig(render_ptr, a2, a3);
     }
 };
 
@@ -535,14 +608,12 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(ADDR_ADP_GETTER + 4).Write<uint32_t>(ARM64_RET);
         exl::patch::CodePatcher(ADDR_ADP_SETTER).Write<uint32_t>(ARM64_RET);
 
-        if (Config::resScaler != 1.0f) {
-            // handheld
-            exl::patch::CodePatcher(0x20c2b0).Write<uint32_t>(ARM64_RET);
-            exl::patch::CodePatcher(0x20b624).Write<uint32_t>(ARM64_NOP);
-            // docked
-            exl::patch::CodePatcher(0x20c310).Write<uint32_t>(ARM64_RET);
-            exl::patch::CodePatcher(0x20b630).Write<uint32_t>(ARM64_NOP);
-        }
+        // handheld
+        exl::patch::CodePatcher(0x20c2b0).Write<uint32_t>(ARM64_RET);
+        exl::patch::CodePatcher(0x20b624).Write<uint32_t>(ARM64_NOP);
+        // docked
+        exl::patch::CodePatcher(0x20c310).Write<uint32_t>(ARM64_RET);
+        exl::patch::CodePatcher(0x20b630).Write<uint32_t>(ARM64_NOP);
 
         if (Config::reflectionQuality != 1.0f) {
             GetReflectionQuality::InstallAtOffset(0x20c3b0);
@@ -662,6 +733,11 @@ void FTRestoration::init() {
     SetMagFilterHook::InstallAtOffset(0x4a0430);
     SetGammaHook::InstallAtOffset(0x4a0150);
     SetExposureHook::InstallAtOffset(0x4a0130);
+    SetToneMapMethodHook::InstallAtOffset(0x4a0120);
+    SetPseModifierHook::InstallAtOffset(0x4ae880);
+    GetPseModifierHook::InstallAtOffset(0x004ae870);
+    GetSaturateCoefHook::InstallAtOffset(0x004a0b50);
+    ToneMapHook::InstallAtOffset(0x4a6cc0);
     SetFxaaParamsHook::InstallAtOffset(0x4a0550);
 
     // MAG Filter patches

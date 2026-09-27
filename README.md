@@ -15,7 +15,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - 95% New Classics Port (USE ORIGINAL ASSETS FROM PC VERSION)
 - DEBUG AND FREECAM
 - MLAA, leaf effect restoration (Sega bugs)
-- Config file with lots of options to adjust, graphical, gameplay etc, e.g. optable toon back
+- Config file with lots of options to adjust, graphical, gameplay etc, e.g. optable toon back, no logos
 - No Songs limit, saving scores and modules and custom items in external savedata
 - Song ID limit up to (2^32 - 2)
 - Increased Limit Of Spritesets to be loaded from 4096 to 32768
@@ -33,12 +33,14 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Saturation patch for my friend
 - AetDB fix port to prevent unnecessary memory allocations
 - SpriteDrawLimit memory allocations fix port for debug mode
+- Skip Logos patch
 - Bone Control through ImGUI
 - Record/Play recorded motions through ImGUI
 - Input Track Overlay through ImGUI
 - State Switcher through ImGUI
 - .bss free memory overlay through ImGUI
-- Resolution scaler overlay
+- Resolution scaler and Post overlay through ImGUI
+- FPS Counter Overlay through ImGUI
 
 _NOTE_: for best looking graphics use dock/fakedock mode using ReverseNX https://github.com/masagrator/ReverseNX-RT + `-no_npr` in args.txt
 
@@ -107,7 +109,7 @@ Hotkeys:
 
 -------------------------------------------------------------------------------------------------------------------------
 
-# ImGUI API Integration for Bones Control, Animation Recorder Player, Input Tracker Overlay, State Switcher, .bss overlay, Resolution Scale Overlay, NC Options:
+# ImGUI API Integration for Bones Control, Animation Recorder Player, State Switcher, Input Tracker, .bss, Resolution Scale & Post Processing, FPS Counter Overlays; NC Options
 - ImGui interface can be toggled by pressing "+" & "-" for second
 - InputOverlay can be toggled and changed (2 modes: keyboard and joycons)
 - The controls are pretty much the same as in debug, including a mouse movement speed increase by holding Y button
@@ -117,15 +119,17 @@ Hotkeys:
 - Toggling Input Overlay will open a new imgui window that is tied to centered bottom of screen, no user interaction, slight transparency. Tracks all your inputs. Useful for people who records videos. Will look like Nintendo Switch Grip for Joycons. It will use keyboard overlay after you press F10 or L3+R3
 - Mouth Focus Switch by holding ZR + ZL buttons for 0.5 seconds for quick switch between in-game debug and imgui window
 - Change Substates within the menu
-- .bss free RAM overlay with update button, enable with pressing L3+R3+ZL for a second. Update with L3 while in menu
-- Dynamic Resolution Overlay - press L3+R3+ZR for a second, touch to use presets
-- New Classics window toggled with ZL
+- .bss free RAM overlay with update button, enable with holding L3+R3+ZL for a second. Update with L3 while in menu
+- Dynamic Resolution & Post Processing Overlay - hold L3+R3+ZR for a second, touch to use presets and change values (R for reset to game default)
+- FPS Counter Overlay - hold L3+R3+"+"
+- New Classics window toggled with ZL in customization menu
 
 
 -------------------------------------------------------------------------------------------------------------------------
 
 # Other info:
 - If youre from older version, remember to move files from DMLSwitchPort to MikuMikuSwitchPlugin
+- Delete subsdk8, it was outdated, and suddenly turned out to cause framerate drop, everything is within subsdk9 now
 - Config lets you set many things, all explained
 - Bone Control is a part of DivaImGUI
 - You can totally disable debug and freecam by having `debug = false` in global config file. This way, none of hotkeys and state selectors can be used.
@@ -145,7 +149,7 @@ Hotkeys:
 - Left Stick: Q, E (Left / Right)
 - Right Stick: U, O (Left / Right)
 - Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/CapsLock (ZL), RightCtrl/,/;/Spacebar (ZR)
-- Menus: Esc (B), Enter/P (+), Tab (-)
+- Menus: Esc/Enter/P (+), Tab (-), BackSpace (B)
 
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -169,13 +173,14 @@ const char *possible_tids[] = {
 - Freecam code by vixen https://github.com/vixen256/camera
 - Challenge Time by vixen https://github.com/vixen256/challenge
 - Render while paused by mokk244
-- Big thanks to https://github.com/Retinalogic/imgui-nvn [subsdk8 by him]
+- Big thanks to https://github.com/god-jester/d3hack/tree/main for nvn hooking
 - Bone Control is a part of DivaImGUI i ported by lybxlpsv https://github.com/lybxlpsv/divaimgui thx to him<3
 - New Classics by https://github.com/mrcloverthecoder/nc
 - Several patches for graphics thx to https://github.com/PDModdingCommunity/PD-Loader
 - Big thanks to ReDIVA reverse engineering https://github.com/korenkonder/ReDIVA
 - SpriteDrawLimit by https://github.com/korenkonder/MMPlusMods/tree/master/src/SpriteDrawLimit
 - AetDB fix by https://github.com/blueskythlikesclouds/DivaModLoader/pull/37
+- Skip logos patch original ips by bakonpancakz
 - Thanks to Dandy Bleat for help with New Classics
 
 

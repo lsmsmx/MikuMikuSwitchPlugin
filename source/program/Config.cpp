@@ -27,6 +27,7 @@ bool Config::disableLyrics = false;
 bool Config::forceJapanese = false;
 bool Config::forceFtUI = false;
 bool Config::ExPatch = true;
+bool Config::skipAdv = false;
 bool Config::enableTouch = false;
 bool Config::enableKeyboard = false;
 
@@ -42,6 +43,9 @@ float Config::shadowIntensity = 1.0f;
 float Config::reflectionQuality = 1.0f;
 float Config::exposure = -1.0f;
 float Config::gamma = -1.0f;
+int Config::toneMapMethod = -1;
+float Config::saturateCoef = -1.0f;
+float Config::exposurePse = -1.0f;
 float Config::fxaaQualitySubpix = -1.0f;
 float Config::fxaaQualityEdgeThreshold = -1.0f;
 float Config::fxaaQualityEdgeThresholdMin = -1.0f;
@@ -117,6 +121,8 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "force_ft_ui = " + std::string(Config::forceFtUI ? "true" : "false") + "\n";
     tomlContent += "# ExPatch (unlocks Extreme charts by default)\n";
     tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n";
+    tomlContent += "# Skip all SEGA logos and intros srtaight to title screen\n";
+    tomlContent += "skipAdv = " + std::string(Config::skipAdv ? "true" : "false") + "\n";
     tomlContent += "# Touch-to-Sliders SUPPORT (two sticks all directions imitation with touchscreen)\n";
     tomlContent += "enable_touch = " + std::string(Config::enableTouch ? "true" : "false") + "\n";
     tomlContent += "# USB KEYBOARD SUPPORT\n";
@@ -125,7 +131,7 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# Left Stick: Q, E (Left / Right)\n";
     tomlContent += "# Right Stick: U, O (Left / Right)\n";
     tomlContent += "# Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/CapsLock (ZL), RightCtrl/,/;/Spacebar (ZR)\n";
-    tomlContent += "# Menus: Esc (B), Enter/P (+), Tab (-)\n";
+    tomlContent += "# Menus: Esc/Enter/P (+), Tab (-), BackSpace (B)\n";
     tomlContent += "enable_keyboard = " + std::string(Config::enableKeyboard ? "true" : "false") + "\n\n";
 
     tomlContent += "[graphics]\n";
@@ -152,8 +158,14 @@ static void SaveConfig(const std::string& path) {
 
     tomlContent += "# Exposure value multiplier: 0.0 to 4.0 (Default -1.0)\n";
     tomlContent += "exposure = " + std::to_string(Config::exposure) + "\n";
-    tomlContent += "# Gamma correction: 0.0 to 1.0 (Set to -1.0 for game default)\n";
+    tomlContent += "# Gamma correction: 0.0 to 2.0 (Set to -1.0 for game default)\n";
     tomlContent += "gamma = " + std::to_string(Config::gamma) + "\n";
+    tomlContent += "# Tone Map Method: -1 (game default), 0 (YCC EXPONENT), 1 (RGB LINEAR), 2 (RGB LINEAR2), 3 (OFF)\n";
+    tomlContent += "tone_map_method = " + std::to_string(Config::toneMapMethod) + "\n";
+    tomlContent += "# Saturate Coef: 0.0 to 1.0 (-1.0 for game default)\n";
+    tomlContent += "saturate_coef = " + std::to_string(Config::saturateCoef) + "\n";
+    tomlContent += "# PSE Exposure modifier scale: 0.0 to 1.0 (-1.0 for game default)\n";
+    tomlContent += "exposure_pse = " + std::to_string(Config::exposurePse) + "\n";
 
     tomlContent += "# FXAA Settings: 0.0 to 1.0 (Set to -1.0 for game default)\n";
     tomlContent += "fxaa_subpix = " + std::to_string(Config::fxaaQualitySubpix) + "\n";
@@ -204,13 +216,14 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "#                    HOTKEYS SHEET                  \n";
     tomlContent += "# [ Touchscreen->Mouse ]       : One/Two fingers\n";
     tomlContent += "# [ IMGUI ]\n";
-    tomlContent += "#   - Hold Plus + Minus (0.8s) : Toggle Debug Menu\n";
-    tomlContent += "#   - Hold ZL + ZR (0.5s)      : Toggle Focus (Game <-> Menu)\n";
+    tomlContent += "#   - Hold Plus + Minus        : Toggle Debug Menu\n";
+    tomlContent += "#   - Hold ZL + ZR             : Toggle Focus (Game <-> Menu)\n";
     tomlContent += "#   - LStick (+ Hold Y)        : Cursor move (+ Turbo speed)\n";
     tomlContent += "#   - ZL / ZR                  : Left Click / Right Click\n";
-    tomlContent += "#   - Hold L3 + R3 (0.8s)      : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
-    tomlContent += "#   - Hold L3 + R3 + ZL (0.8s) : Toggle BSS RAM Overlay\n";
-    tomlContent += "#   - Hold L3 + R3 + ZR (0.8s) : Toggle Resolution Scaler Overlay\n";
+    tomlContent += "#   - Hold L3 + R3             : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
+    tomlContent += "#   - Hold L3 + R3 + ZL        : Toggle BSS RAM Overlay\n";
+    tomlContent += "#   - Hold L3 + R3 + ZR        : Toggle Resolution Scaler & Post Processing Overlay\n";
+    tomlContent += "#   - Hold L3 + R3 + '+'       : Toggle FPS Counter Overlay\n";
     tomlContent += "#   - L3 (in RAM Overlay)      : Rescan RAM\n";
     tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
     tomlContent += "#   - ZL in cstm menu          : Toggle New Classics Options window\n";
@@ -306,6 +319,7 @@ bool Config::init() {
             forceJapanese = config["gameplay"]["force_japanese"].value_or(false);
             forceFtUI = config["gameplay"]["force_ft_ui"].value_or(false);
             ExPatch = config["gameplay"]["ExPatch"].value_or(true);
+            skipAdv = config["gameplay"]["skipAdv"].value_or(false);
             enableTouch = config["gameplay"]["enable_touch"].value_or(false);
             enableKeyboard = config["gameplay"]["enable_keyboard"].value_or(false);
 
@@ -319,6 +333,9 @@ bool Config::init() {
             ssaaMode = config["graphics"]["ssaa_mode"].value_or("off");
             exposure = (float)config["graphics"]["exposure"].value_or(-1.0f);
             gamma = (float)config["graphics"]["gamma"].value_or(-1.0f);
+            toneMapMethod = (int)config["graphics"]["tone_map_method"].value_or(-1);
+            saturateCoef  = (float)config["graphics"]["saturate_coef"].value_or(-1.0f);
+            exposurePse   = (float)config["graphics"]["exposure_pse"].value_or(-1.0f);
             fxaaQualitySubpix = (float)config["graphics"]["fxaa_subpix"].value_or(-1.0f);
             fxaaQualityEdgeThreshold = (float)config["graphics"]["fxaa_edge_threshold"].value_or(-1.0f);
             fxaaQualityEdgeThresholdMin = (float)config["graphics"]["fxaa_edge_threshold_min"].value_or(-1.0f);

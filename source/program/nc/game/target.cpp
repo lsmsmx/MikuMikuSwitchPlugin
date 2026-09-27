@@ -408,7 +408,7 @@ HOOK_DEFINE_TRAMPOLINE(UpdateTargetsHook) {
 HOOK_DEFINE_TRAMPOLINE(UpdateKisekiHook) {
 	static void Callback(PVGameArcade* data, PvGameTarget* target, float dt) {
 		TargetStateEx* ex = GetTargetStateEx(target);
-		if (ex->IsLongNote())
+		if (ex && ex->IsLongNote())
 		{
 			ex->kiseki_pos = target->button_pos;
 			ex->kiseki_dir = target->delta_pos_sq;
@@ -495,16 +495,20 @@ HOOK_DEFINE_TRAMPOLINE(DrawArcadeGameHook) {
 
 static void PatchCommonKiseki(PvGameTarget* target)
 {
-	float r, g, b;
+	float r = 0.0f, g = 0.0f, b = 0.0f;
 	TargetStateEx* ex = GetTargetStateEx(target);
 
-	switch (target->target_type)
+	int32_t real_type = (ex != nullptr && ex->target_type >= TargetType_Custom)
+	                    ? ex->target_type
+	                    : target->target_type;
+
+	switch (real_type)
 	{
 	case TargetType_TriangleRush:
 	case TargetType_UpW:
 		r = 0.799f;
 		g = 1.0f;
-		b = 0.5401;
+		b = 0.5401f;
 		break;
 	case TargetType_CircleRush:
 	case TargetType_RightW:
@@ -571,7 +575,7 @@ static void PatchCommonKiseki(PvGameTarget* target)
 			target->kiseki[i].color = alpha | 0x00FFFFFF;
 		}
 	}
-	else if (target->target_type >= TargetType_Custom)
+	else if (real_type >= TargetType_Custom)
 	{
 		uint32_t color = (uint8_t)(r * 255) |
 			((uint8_t)(g * 255) << 8) |

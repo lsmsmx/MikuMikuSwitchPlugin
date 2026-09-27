@@ -1,6 +1,5 @@
 #include "ImGui.hpp"
 #include "macros.hpp"
-#include "imgui/imgui_nvn.h"
 #include <nn/fs.hpp>
 #include <nn/os.hpp>
 #include <hid.hpp>
@@ -11,13 +10,23 @@
 #include <cmath>
 #include <vector>
 #include <set>
-#include "InputOverlay.hpp"
+
 #include "DebugMode.hpp"
 #include "keyboard_sliders.hpp"
-#include "StateSwitcher.hpp"
-#include "MemoryScannerUi.hpp"
-#include "ResScalerUI.hpp"
+
+#include "overlays/InputOverlay.hpp"
+#include "overlays/StateSwitcher.hpp"
+#include "overlays/MemoryScannerUi.hpp"
+#include "overlays/ResScalerUI.hpp"
+#include "overlays/PostProcessUI.hpp"
+#include "overlays/FpsOverlay.hpp"
+
 #include "nc/ui/customize_sel.hpp"
+
+#include "nvn_hooks.hpp"
+#include "backend/imgui_backend/imgui_impl_nvn.hpp"
+#include "backend/imgui_alloc.hpp"
+
 
 #ifndef IMNVNFUNC
 #define IMNVNFUNC __attribute__((visibility("default")))
@@ -455,6 +464,7 @@ namespace ImGui {
     void Init() {
         RefreshFiles();
         MemoryScannerUi::Init();
+
         BonesUpdateHook::InstallAtOffset(ADDR_UPDATE_BONES);
     }
 }
@@ -528,7 +538,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     nn::hid::NpadHandheldState npad = nn::hid::GetMergedNpadState();
 
-    // Main Menu Hotkey: Plus + Minus
+    // Main Menu Hotkey: Plus + Minus (Hold 0.8s)
     static float menu_hold_timer = 0.0f;
     if ((npad.buttons & nn::hid::Button::Plus) && (npad.buttons & nn::hid::Button::Minus)) {
         menu_hold_timer += dt;
@@ -558,7 +568,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         mem_hold_timer = 0.0f;
     }
 
-    // Resolution Scaler Overlay Hotkey: L3 + R3 + ZR
+    // Resolution Scaler and Post Process Overlay Hotkey: L3 + R3 + ZR
     static float res_hold_timer = 0.0f;
     bool isResCombo = (npad.buttons & nn::hid::Button::LStick) &&
                       (npad.buttons & nn::hid::Button::RStick) &&
@@ -568,6 +578,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         res_hold_timer += dt;
         if (res_hold_timer >= 0.8f && (res_hold_timer - dt) < 0.8f) {
             ResScalerUi::g_showWindow = !ResScalerUi::g_showWindow;
+            PostProcessUi::g_showWindow = ResScalerUi::g_showWindow;
             if (ResScalerUi::g_showWindow) {
                 ImGui::g_imguiHasFocus = true;
             }
@@ -576,12 +587,29 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         res_hold_timer = 0.0f;
     }
 
-    // Input Overlay Hotkey: L3 + R3 (WITHOUT ZL and WITHOUT ZR)
+    // FPS Overlay Hotkey: L3 + R3 + Plus
+    static float fps_hold_timer = 0.0f;
+    bool isFpsCombo = (npad.buttons & nn::hid::Button::LStick) &&
+                      (npad.buttons & nn::hid::Button::RStick) &&
+                      (npad.buttons & nn::hid::Button::Plus);
+
+    if (isFpsCombo) {
+        fps_hold_timer += dt;
+        if (fps_hold_timer >= 0.8f && (fps_hold_timer - dt) < 0.8f) {
+            FpsOverlay::g_showWindow = !FpsOverlay::g_showWindow;
+        }
+    } else {
+        fps_hold_timer = 0.0f;
+    }
+
+    // Input Overlay Hotkey: L3 + R3 (without ZL, ZR, and without Plus)
     static float overlay_hold_timer = 0.0f;
     bool isOverlayCombo = (npad.buttons & nn::hid::Button::LStick) &&
                           (npad.buttons & nn::hid::Button::RStick) &&
                           !(npad.buttons & nn::hid::Button::ZL) &&
-                          !(npad.buttons & nn::hid::Button::ZR);
+                          !(npad.buttons & nn::hid::Button::ZR) &&
+                          !(npad.buttons & nn::hid::Button::Plus);
+
 
     if (isOverlayCombo) {
         overlay_hold_timer += dt;
@@ -603,8 +631,12 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     s_f10WasDown = isF10Down;
 
     bool overlayVisible = InputOverlay::IsVisible();
-    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow || CustomizeSelUi::IsOpen();
+    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer ||
+                     MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow ||
+                     PostProcessUi::g_showWindow || CustomizeSelUi::IsOpen() ||
+                     FpsOverlay::g_showWindow;
 
+    // Fast return if no UI or overlay is active
     if (!anyUiOpen && !overlayVisible) {
         ImGui::mikuposptrcounter = -1;
         return nullptr;
@@ -616,11 +648,16 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     bool isLeftClick = false, isRightClick = false, isTouchActive = false;
 
-    // Direct hardware button reading
+    static float s_mouseActivityTimer = 0.0f;
+    if (s_mouseActivityTimer > 0.0f) {
+        s_mouseActivityTimer -= dt;
+        if (s_mouseActivityTimer < 0.0f) s_mouseActivityTimer = 0.0f;
+    }
+
     bool isZLPressed = (npad.buttons & nn::hid::Button::ZL) != 0;
     bool isZRPressed = (npad.buttons & nn::hid::Button::ZR) != 0;
 
-    // Toggle focus: Hold ZL + ZR for 0.5s
+    // Toggle input focus: Hold ZL + ZR for 0.5s
     if (anyUiOpen) {
         static float switchHoldTime = 0.0f;
         if (isZLPressed && isZRPressed) {
@@ -636,7 +673,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         }
     }
 
-    // Only update cursor position if ImGui currently has focus
+    // Process inputs only when ImGui has focus
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
         if (nn::hid::GetTouchScreenState) {
             nn::hid::TouchScreenState ts = {};
@@ -645,22 +682,24 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
                 ImGui::g_cursorX = (float)ts.touches[0].x;
                 ImGui::g_cursorY = (float)ts.touches[0].y;
                 isTouchActive = true;
-
-                if (ts.count >= 2) {
-                    isRightClick = true;
-                } else {
-                    isLeftClick = true;
-                }
+                if (ts.count >= 2) isRightClick = true;
+                else isLeftClick = true;
             }
         }
 
         if (nn::hid::GetMouseState && !isTouchActive) {
             nn::hid::MouseState ms = {};
             nn::hid::GetMouseState(&ms);
-            ImGui::g_cursorX += (float)ms.deltaX;
-            ImGui::g_cursorY += (float)ms.deltaY;
-            if (ms.buttons & 1) isLeftClick = true;
-            if (ms.buttons & 2) isRightClick = true;
+            if (ms.deltaX != 0 || ms.deltaY != 0 || ms.buttons != 0 || ms.wheelDeltaY != 0) {
+                ImGui::g_cursorX += (float)ms.deltaX;
+                ImGui::g_cursorY += (float)ms.deltaY;
+                if (ms.buttons & 1) isLeftClick = true;
+                if (ms.buttons & 2) isRightClick = true;
+                if (ms.wheelDeltaY != 0) {
+                    io.AddMouseWheelEvent(0.0f, static_cast<float>(ms.wheelDeltaY));
+                }
+                s_mouseActivityTimer = 5.0f;
+            }
         }
 
         if (!isTouchActive) {
@@ -683,15 +722,25 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::g_cursorY = std::clamp(ImGui::g_cursorY, 0.0f, 720.0f);
     }
 
-    // True only if interactive tool windows are open (not just HUD overlay)
     bool isFullWindowOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer;
-    bool shouldDrawCursor = isFullWindowOpen && ImGui::g_imguiHasFocus && !isTouchActive;
+    bool isOverlayOpen = ResScalerUi::g_showWindow ||
+                         PostProcessUi::g_showWindow ||
+                         MemoryScannerUi::g_showWindow ||
+                         CustomizeSelUi::IsOpen();
+
+    bool shouldDrawCursor = false;
+    if (ImGui::g_imguiHasFocus && !isTouchActive) {
+        if (isFullWindowOpen) {
+            shouldDrawCursor = true;
+        } else if (isOverlayOpen && (s_mouseActivityTimer > 0.0f)) {
+            shouldDrawCursor = true;
+        }
+    }
 
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
         io.AddMousePosEvent(ImGui::g_cursorX, ImGui::g_cursorY);
         io.AddMouseButtonEvent(0, isLeftClick);
         io.AddMouseButtonEvent(1, isRightClick);
-
         io.MouseDrawCursor = shouldDrawCursor;
         ImGui::SetMouseCursor(shouldDrawCursor ? ImGuiMouseCursor_Arrow : ImGuiMouseCursor_None);
     } else {
@@ -703,9 +752,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     ImGui::NewFrame();
 
-    // =====================================
-    // MAIN DEBUG WINDOW
-    // =====================================
+    // 1. Main Debug Window
     if (ImGui::g_isMenuOpen) {
         ImGui::SetNextWindowBgAlpha(ImGui::g_imguiHasFocus ? 0.85f : 0.35f);
         std::string title = "Debug Ui" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###MotionDebugWindow";
@@ -713,22 +760,18 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::Begin(title.c_str(), &ImGui::g_isMenuOpen, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-        // 1. SMART MOTION RECORDER
         if (ImGui::CollapsingHeader("Smart Motion Recorder")) {
             ImGui::Separator();
-
             if (ImGui::g_recordState == 0) {
                 if (ImGui::Button("Arm Recording (Wait for Motion)")) {
                     ImGui::g_recordState = 1;
                     ImGui::g_hasBaseSnapshot = false;
                 }
                 ImGui::SameLine(); ImGui::Text("Status: IDLE");
-            }
-            else if (ImGui::g_recordState == 1) {
+            } else if (ImGui::g_recordState == 1) {
                 if (ImGui::Button("Cancel")) ImGui::g_recordState = 0;
                 ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: ARMED (Play Anim!)");
-            }
-            else if (ImGui::g_recordState == 2) {
+            } else if (ImGui::g_recordState == 2) {
                 ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: RECORDING... (Frame %d)", ImGui::g_recordFrameCounter);
                 if (ImGui::Button("Stop & Save Now")) {
                     ImGui::SaveDumpToSD();
@@ -736,18 +779,14 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
                     ImGui::RefreshFiles();
                 }
             }
-
             ImGui::Spacing(); ImGui::Separator();
-
             if (ImGui::Button("Refresh All Files")) ImGui::RefreshFiles();
             ImGui::SameLine();
             if (ImGui::Button("Open Ultimate Motion Player")) ImGui::g_showUltimatePlayer = true;
         }
 
-        // 2. MOTION CONTROL
         if (ImGui::CollapsingHeader("Motion Control")) {
             ImGui::Separator();
-
             int displayBones = ImGui::g_maxBones;
             ImGui::InputInt("Total Bones", &displayBones, 0, 0, ImGuiInputTextFlags_ReadOnly);
             ImGui::InputInt("Current Bone", &ImGui::curmikupos);
@@ -766,7 +805,6 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
                 float* m1 = ImGui::mikupos_a1[ImGui::curmikupos];
                 float* m2 = ImGui::mikupos_a2[ImGui::curmikupos];
                 int start = ImGui::mikushowall ? 0 : 15;
-
                 for (int i = start; i <= 23; i++) {
                     ImGui::PushItemWidth(100);
                     if (m1) {
@@ -783,20 +821,16 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
-        // 3. SCENE SWITCHER
         StateSwitcher::Draw();
 
-        // 4. EXTRA OVERLAYS
         if (ImGui::CollapsingHeader("Extra Overlays")) {
             ImGui::Separator();
-
             const char* modeNames[] = { "Disabled", "Gamepad Overlay", "Keyboard Overlay" };
             int curMode = std::clamp(InputOverlay::GetMode(), 0, 2);
 
             ImGui::PushItemWidth(260);
             if (ImGui::BeginCombo("Active Overlay", modeNames[curMode])) {
                 ImGui::GetWindowDrawList()->PushClipRectFullScreen();
-
                 for (int n = 0; n < 3; n++) {
                     bool is_selected = (curMode == n);
                     if (ImGui::Selectable(modeNames[n], is_selected)) {
@@ -804,16 +838,13 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
                     }
                     if (is_selected) ImGui::SetItemDefaultFocus();
                 }
-
                 ImGui::GetWindowDrawList()->PopClipRect();
                 ImGui::EndCombo();
             }
             ImGui::PopItemWidth();
 
-            ImGui::Spacing();
-            ImGui::Separator();
+            ImGui::Spacing(); ImGui::Separator();
 
-            // Toggle button to open/close BSS Gaps Overlay
             const char* bssBtnLabel = MemoryScannerUi::g_showWindow ? "Close BSS Gaps Overlay" : "Open BSS Gaps Overlay";
             if (ImGui::Button(bssBtnLabel, ImVec2(240, 28))) {
                 MemoryScannerUi::g_showWindow = !MemoryScannerUi::g_showWindow;
@@ -832,9 +863,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::End();
     }
 
-    // =====================================
-    // 5. ULTIMATE MOTION PLAYER
-    // =====================================
+    // 2. Ultimate Motion Player Window
     if (ImGui::g_showUltimatePlayer) {
         ImGui::SetNextWindowBgAlpha(ImGui::g_imguiHasFocus ? 0.90f : 0.40f);
         if (ImGui::Begin("Ultimate Motion Player", &ImGui::g_showUltimatePlayer, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -898,20 +927,53 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::End();
     }
 
-    // 6. BSS GAPS OVERLAY
-    MemoryScannerUi::DrawWindow();
-
-    // 7. RESOLUTION SCALER OVERLAY
-    ResScalerUi::DrawWindow();
-
-    // Unified Overlay Call
+    // 3. Render Sub-Overlays
     InputOverlay::Draw();
-
-    // CustomizeSel
+    MemoryScannerUi::DrawWindow();
+    ResScalerUi::DrawWindow();
+    PostProcessUi::DrawWindow();
+    FpsOverlay::DrawWindow();
     CustomizeSelUi::Draw();
 
     ImGui::Render();
-
     ImGui::mikuposptrcounter = -1;
-    return ImGui::GetDrawData();
+
+    ImDrawData* drawData = ImGui::GetDrawData();
+    if (!drawData || drawData->CmdListsCount == 0 || drawData->TotalVtxCount == 0) {
+        return nullptr;
+    }
+
+    return drawData;
+}
+
+void MyOnPresent(NVNqueue *queue, NVNwindow *window, int texture_index) {
+    static bool s_context_ready = false;
+    if (!s_context_ready) {
+        nvn_backend::TryConfigureImGuiAllocators();
+        nvnImguiInitialize();
+        s_context_ready = true;
+    }
+
+    ImDrawData* drawData = nvnImguiCalc();
+
+    if (!drawData || drawData->CmdListsCount == 0 || drawData->TotalVtxCount == 0) {
+        return;
+    }
+
+    static bool s_backend_ready = false;
+    if (!s_backend_ready) {
+        nvn_hooks::LoadCppProcsOnce();
+
+        ImguiNvnBackend::NvnBackendInitInfo init_info {};
+        init_info.device = reinterpret_cast<nvn::Device*>(nvn_hooks::GetDevice());
+        init_info.queue  = reinterpret_cast<nvn::Queue*>(queue);
+
+        ImguiNvnBackend::InitBackend(init_info);
+        s_backend_ready = true;
+    }
+
+    const auto* rt = nvn_hooks::GetSwapchainTextureForBackend(texture_index);
+    ImguiNvnBackend::SetRenderTarget(rt);
+
+    ImguiNvnBackend::renderDrawData(drawData);
 }

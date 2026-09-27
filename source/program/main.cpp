@@ -12,6 +12,7 @@
 #include "FTRestoration.hpp"
 #include "lib.hpp"
 #include "ImGui.hpp"
+#include "nvn_hooks.hpp"
 #include "PvLoader.hpp"
 #include "patches.hpp"
 #include "fs.hpp"
@@ -32,7 +33,8 @@
 #include <stdint.h>
 #include <string.h>
 
-
+// nvn function from ImGUI
+void MyOnPresent(NVNqueue *queue, NVNwindow *window, int texture_index);
 
 // =========================================================
 // INITIALIZATION
@@ -49,6 +51,8 @@ HOOK_DEFINE_TRAMPOLINE(MainHook) {
         ApplyCustomPatches();
         FTRestoration::init();
         InitFreeCam();
+
+        nvn_hooks::InstallHooks(&MyOnPresent);
         ImGui::Init();
 
         nc::init();

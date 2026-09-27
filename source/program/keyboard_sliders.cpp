@@ -53,7 +53,7 @@ namespace keyboard_sliders {
         // Notes
         if (IsDown(12)) buttons |= nn::hid::Button::X;
         if (IsDown(13)) buttons |= nn::hid::Button::Y;
-        if (IsDown(14)) buttons |= nn::hid::Button::B;
+        if (IsDown(14) || IsDown(42)) buttons |= nn::hid::Button::B;
         if (IsDown(15)) buttons |= nn::hid::Button::A;
 
         // D-Pad
@@ -73,9 +73,8 @@ namespace keyboard_sliders {
         if (IsDown(11)) buttons |= nn::hid::Button::RStick;
 
         // System
-        if (IsDown(40) || IsDown(19)) buttons |= nn::hid::Button::Plus;
-        if (IsDown(41))               buttons |= nn::hid::Button::B;
-        if (IsDown(43))               buttons |= nn::hid::Button::Minus;
+        if (IsDown(40) || IsDown(19) || IsDown(41)) buttons |= nn::hid::Button::Plus;
+        if (IsDown(43)) buttons |= nn::hid::Button::Minus;
 
         state->buttons |= buttons;
 
