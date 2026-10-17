@@ -7,6 +7,7 @@
 #include "../nc_state.hpp"
 #include "../util.hpp"
 #include "dsc.hpp"
+#include "ChartRandomizer.hpp"
 
 enum DscState : int32_t
 {
@@ -45,33 +46,19 @@ enum DscOp : int32_t
 	DscOp_TargetEffect = 91,
 };
 
-struct DscFrame
+DscFrame::DscCommand::DscCommand(int32_t opcode, std::initializer_list<int32_t> params)
 {
-	struct DscCommand
-	{
-		int32_t length;
-		int32_t opcode;
-		int32_t data[30];
+	length = static_cast<int32_t>(params.size());
+	this->opcode = opcode;
+	std::memcpy(data, params.begin(), params.size() * sizeof(int32_t));
+}
 
-		DscCommand() = default;
-		DscCommand(int32_t opcode, std::initializer_list<int32_t> params)
-		{
-			length = static_cast<int32_t>(params.size());
-			this->opcode = opcode;
-			std::memcpy(data, params.begin(), params.size() * sizeof(int32_t));
-		}
-
-		// Pointer-based constructor to avoid std::initializer_list constraints
-		DscCommand(int32_t opcode, const int32_t* params, size_t count)
-		{
-			length = static_cast<int32_t>(count);
-			this->opcode = opcode;
-			std::memcpy(data, params, count * sizeof(int32_t));
-		}
-	};
-
-	std::array<std::vector<DscCommand>, 3> branch_modes;
-};
+DscFrame::DscCommand::DscCommand(int32_t opcode, const int32_t* params, size_t count)
+{
+	length = static_cast<int32_t>(count);
+	this->opcode = opcode;
+	std::memcpy(data, params, count * sizeof(int32_t));
+}
 
 static bool dsc_ready[2] = { false, false };
 static int32_t* dsc_data[2] = { nullptr, nullptr };
@@ -279,7 +266,6 @@ static bool ParseDsc(const int32_t* data, int32_t format, std::map<int32_t, DscF
 				multi_index = 0;
 				had_target = false;
 			}
-
 			break;
 		case DscOp_ChangeField:
 			if (flags & MergeFlags_IgnorePV)
@@ -448,20 +434,45 @@ static bool CompileDsc(PVGamePvData& pv_data, const std::map<int32_t, DscFrame>&
 	return true;
 }
 
+// Cached original chart data for retries
+static std::map<int32_t, DscFrame> s_cleanChartData;
+
 static bool MergeDscs(PVGamePvData& pv_data)
 {
-	if (dsc_data[0] && IsVanillaFormat(0) && !dsc_data[1])
-		return true;
+    // If randomizer is disabled and vanilla chart format is used, pass through unmodified
+    if (dsc_data[0] && IsVanillaFormat(0) && !dsc_data[1] && !ChartRandomizer::IsEnabled())
+        return true;
 
-	std::map<int32_t, DscFrame> data;
-	if (dsc_data[0])
-		ParseDsc(dsc_data[0], GetDscFileFormat(0), data, dsc_data[1] ? MergeFlags_IgnoreChart : MergeFlags_None);
+    std::map<int32_t, DscFrame> data;
+    if (dsc_data[0])
+        ParseDsc(dsc_data[0], GetDscFileFormat(0), data, dsc_data[1] ? MergeFlags_IgnoreChart : MergeFlags_None);
 
-	if (dsc_data[1])
-		ParseDsc(dsc_data[1], GetDscFileFormat(1), data, MergeFlags_IgnorePV);
+    if (dsc_data[1])
+        ParseDsc(dsc_data[1], GetDscFileFormat(1), data, MergeFlags_IgnorePV);
 
-	CompileDsc(pv_data, data);
-	return true;
+    // Backup original chart
+    s_cleanChartData = data;
+
+    // Randomize chart targets
+    if (ChartRandomizer::IsEnabled())
+        ChartRandomizer::Randomize(data);
+
+    CompileDsc(pv_data, data);
+    return true;
+}
+
+// Called from PVGameResetHook on song retry
+void RerollDscOnReset(PVGamePvData& pv_data)
+{
+    if (!ChartRandomizer::IsEnabled() || s_cleanChartData.empty())
+        return;
+
+    if (!ChartRandomizer::GetRerollOnRetry())
+        return;
+
+    auto data = s_cleanChartData;
+    ChartRandomizer::Randomize(data);
+    CompileDsc(pv_data, data);
 }
 
 TargetStateEx* g_open_longs[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };

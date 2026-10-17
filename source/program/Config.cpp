@@ -12,12 +12,12 @@
 
 bool Config::enableMods = true;
 bool Config::enableDebug = false;
+bool Config::enableImGUI = true;
 std::string Config::modsDirectoryPath = "";
 std::vector<std::string> Config::priorityPaths;
 
 // Feature Master Toggles
-bool Config::enableFtUi = false;
-bool Config::enableNewClassics = false;
+bool Config::enableNewClassics = true;
 
 // Gameplay
 std::string Config::challengeTimeMode = "default";
@@ -30,12 +30,19 @@ bool Config::ExPatch = true;
 bool Config::skipAdv = false;
 bool Config::enableTouch = false;
 bool Config::enableKeyboard = false;
+int Config::bgmBoost = 0;
+int Config::btnBoost = 0;
+int Config::seBoost = 0;
+bool Config::acapellaMode = false;
 
 // Graphics
 bool Config::disableAdp = false;
 bool Config::enableSss = false;
 bool Config::cstmMenuFtStyle = false;
 bool Config::extraFtGraphics = false;
+bool Config::no3D = false;
+bool Config::noMV = false;
+bool Config::backMV = false;
 std::string Config::antiAliasing = "fxaa";
 std::string Config::magFilterMode = "default";
 std::string Config::ssaaMode = "off";
@@ -46,6 +53,7 @@ float Config::gamma = -1.0f;
 int Config::toneMapMethod = -1;
 float Config::saturateCoef = -1.0f;
 float Config::exposurePse = -1.0f;
+int Config::dim = -1;
 float Config::fxaaQualitySubpix = -1.0f;
 float Config::fxaaQualityEdgeThreshold = -1.0f;
 float Config::fxaaQualityEdgeThresholdMin = -1.0f;
@@ -88,13 +96,16 @@ uint32_t Config::reflectH = 512;
 uint32_t Config::refractW = 1024;
 uint32_t Config::refractH = 512;
 
+bool Config::enableFtUi = false;
+
 static void SaveConfig(const std::string& path) {
     std::string tomlContent = "# =========================================================\n";
     tomlContent += "# MikuMikuSwitchPlugin - Global Configuration\n";
     tomlContent += "# Author: lsmsmx\n";
     tomlContent += "# =========================================================\n\n";
     tomlContent += "mods = " + std::string(Config::enableMods ? "true" : "false") +"\n";
-    tomlContent += "debug = " + std::string(Config::enableDebug ? "true" : "false") + "\n\n";
+    tomlContent += "debug = " + std::string(Config::enableDebug ? "true" : "false") + "\n";
+    tomlContent += "imgui = " + std::string(Config::enableImGUI ? "true" : "false") +"\n\n";
     tomlContent += "# Priority list (Top is highest priority).\n";
     tomlContent += "# New mods found on SD are automatically appended here.\n";
     tomlContent += "priority = [\n";
@@ -107,8 +118,12 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "[gameplay]\n";
     tomlContent += "# Master toggle for New Classics mod features\n";
     tomlContent += "new_classics = " + std::string(Config::enableNewClassics ? "true" : "false") + "\n";
+    tomlContent += "# ExPatch (unlocks Extreme charts by default)\n";
+    tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n";
     tomlContent += "# Challenge Time mode: \"enabled\" (force all difficulties), \"disabled\" (completely off), \"default\" (vanilla)\n";
     tomlContent += "challenge_time = \"" + Config::challengeTimeMode + "\"\n";
+    tomlContent += "# Skip all SEGA logos and intros srtaight to title screen\n";
+    tomlContent += "skipAdv = " + std::string(Config::skipAdv ? "true" : "false") + "\n";
     tomlContent += "# Removes Copyright & PV watermark text during playback\n";
     tomlContent += "remove_watermarks = " + std::string(Config::removeWatermarks ? "true" : "false") + "\n";
     tomlContent += "# Disables hand model scaling in PVs\n";
@@ -119,10 +134,6 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "force_japanese = " + std::string(Config::forceJapanese ? "true" : "false") + "\n";
     tomlContent += "# PS4 FTUI forced leftovers\n";
     tomlContent += "force_ft_ui = " + std::string(Config::forceFtUI ? "true" : "false") + "\n";
-    tomlContent += "# ExPatch (unlocks Extreme charts by default)\n";
-    tomlContent += "ExPatch = " + std::string(Config::ExPatch ? "true" : "false") + "\n";
-    tomlContent += "# Skip all SEGA logos and intros srtaight to title screen\n";
-    tomlContent += "skipAdv = " + std::string(Config::skipAdv ? "true" : "false") + "\n";
     tomlContent += "# Touch-to-Sliders SUPPORT (two sticks all directions imitation with touchscreen)\n";
     tomlContent += "enable_touch = " + std::string(Config::enableTouch ? "true" : "false") + "\n";
     tomlContent += "# USB KEYBOARD SUPPORT\n";
@@ -132,7 +143,13 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "# Right Stick: U, O (Left / Right)\n";
     tomlContent += "# Triggers: LeftShift/X (L), RightShift/M (R), LeftCtrl/Z/CapsLock (ZL), RightCtrl/,/;/Spacebar (ZR)\n";
     tomlContent += "# Menus: Esc/Enter/P (+), Tab (-), BackSpace (B)\n";
-    tomlContent += "enable_keyboard = " + std::string(Config::enableKeyboard ? "true" : "false") + "\n\n";
+    tomlContent += "enable_keyboard = " + std::string(Config::enableKeyboard ? "true" : "false") + "\n";
+    tomlContent += "# Sound Boost, 0 is no boost, 100 means <+ 10> to sound, infinite\n";
+    tomlContent += "bgmBoost = " + std::to_string(Config::bgmBoost) + "\n";
+    tomlContent += "btnBoost = " + std::to_string(Config::btnBoost) + "\n";
+    tomlContent += "seBoost = " + std::to_string(Config::seBoost) + "\n";
+    tomlContent += "# Vocal-only mode when you set BGM to 0 (requires two sound channels)\n";
+    tomlContent += "acapellaMode = " + std::string(Config::acapellaMode ? "true" : "false") + "\n\n";
 
     tomlContent += "[graphics]\n";
     tomlContent += "# NOTE: for best looking graphics use dock/fakedock mode using ReverseNX + -no_npr in args.txt\n";
@@ -146,6 +163,8 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "anti_aliasing = \"" + Config::antiAliasing + "\"\n";
     tomlContent += "# Texture Magnification Filter: \"bilinear\", \"nearest\", \"sharpen_5tap\", \"sharpen_4tap\", \"cone_4tap\", \"cone_2tap\", \"default\"\n";
     tomlContent += "mag_filter = \"" + Config::magFilterMode + "\"\n";
+    tomlContent += "# Forces Future Tone Mode extra patches to get maximumly close to MM+ \n";
+    tomlContent += "extraFtGraphics = " + std::string(Config::extraFtGraphics ? "true" : "false") + "\n";
     tomlContent += "# SSAA (Super Sampling) mode: \"on\", \"off\"\n";
     tomlContent += "ssaa_mode = \"" + Config::ssaaMode + "\"\n";
     tomlContent += "# Force Disables (true = Disabled, false = Vanilla Enabled)\n";
@@ -153,8 +172,12 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "force_disable_shadows = " + std::string(Config::disableShadows ? "true" : "false") + "\n";
     tomlContent += "force_disable_self_shadow = " + std::string(Config::disableSelfShadow ? "true" : "false") + "\n";
     tomlContent += "force_disable_DOF = " + std::string(Config::disableDOF ? "true" : "false") + "\n";
-    tomlContent += "# Forces Future Tone Mode extra patches to get maximumly close to MM+ \n";
-    tomlContent += "extraFtGraphics = " + std::string(Config::extraFtGraphics ? "true" : "false") + "\n";
+    tomlContent += "# No Movies can load\n";
+    tomlContent += "noMV = " + std::string(Config::noMV ? "true" : "false") + "\n";
+    tomlContent += "# Force movie_pv_type to NOT be FRONT for all vids (useful for PP tweaks) \n";
+    tomlContent += "backMV = " + std::string(Config::backMV ? "true" : "false") + "\n";
+    tomlContent += "# Forces 2D mode (no 3D render) + static bg mode\n";
+    tomlContent += "no3D = " + std::string(Config::no3D ? "true" : "false") + "\n";
 
     tomlContent += "# Exposure value multiplier: 0.0 to 4.0 (Default -1.0)\n";
     tomlContent += "exposure = " + std::to_string(Config::exposure) + "\n";
@@ -166,6 +189,8 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "saturate_coef = " + std::to_string(Config::saturateCoef) + "\n";
     tomlContent += "# PSE Exposure modifier scale: 0.0 to 1.0 (-1.0 for game default)\n";
     tomlContent += "exposure_pse = " + std::to_string(Config::exposurePse) + "\n";
+    tomlContent += "# Dim for PV: 0 to 100 dark strength (-1 for game default)\n";
+    tomlContent += "dim = " + std::to_string(Config::dim) + "\n";
 
     tomlContent += "# FXAA Settings: 0.0 to 1.0 (Set to -1.0 for game default)\n";
     tomlContent += "fxaa_subpix = " + std::to_string(Config::fxaaQualitySubpix) + "\n";
@@ -220,13 +245,21 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "#   - Hold ZL + ZR             : Toggle Focus (Game <-> Menu)\n";
     tomlContent += "#   - LStick (+ Hold Y)        : Cursor move (+ Turbo speed)\n";
     tomlContent += "#   - ZL / ZR                  : Left Click / Right Click\n";
-    tomlContent += "#   - Hold L3 + R3             : Cycle Input Overlay (Off/Gamepad/Keyboard)\n";
+    tomlContent += "#   - Hold L3 + R3             : Toggle Input Overlay (Off/Gamepad/Keyboard)\n";
+    tomlContent += "#   - Hold L3 + R3 + L         : Toggle Dimming Overlay\n";
+    tomlContent += "#   - Hold L3 + R3 + R         : Toggle Volume Boost Overlay\n";
     tomlContent += "#   - Hold L3 + R3 + ZL        : Toggle BSS RAM Overlay\n";
     tomlContent += "#   - Hold L3 + R3 + ZR        : Toggle Resolution Scaler & Post Processing Overlay\n";
     tomlContent += "#   - Hold L3 + R3 + '+'       : Toggle FPS Counter Overlay\n";
     tomlContent += "#   - L3 (in RAM Overlay)      : Rescan RAM\n";
     tomlContent += "#   - F10                      : Toggle Keyboard Overlay\n";
     tomlContent += "#   - ZL in cstm menu          : Toggle New Classics Options window\n";
+    tomlContent += "#   - ZR in pv_sel menu        : Toggle Autoplay\n";
+    tomlContent += "#   - ZR x2 in pv_sel menu     : Toggle NoMovie mode\n";
+    tomlContent += "#   - L3+ZR in pv_sel menu     : Toggle 2D mode\n";
+    tomlContent += "#   - '-' after choosing song  : Toggle Randomizer, control with X and ZL/ZR\n";
+    tomlContent += "#   - Touch in pv_sel menu     : Jump to specific song\n";
+    tomlContent += "#   - '+' in nsw_menu          : Open MMSP Help Window\n";
     tomlContent += "# [ FREECAM ]\n";
     tomlContent += "#   - L + R + Minus            : Toggle Freecam\n";
     tomlContent += "#   - D-Pad                    : Move Forward / Back / Left / Right\n";
@@ -259,29 +292,8 @@ static void SaveConfig(const std::string& path) {
 }
 
 bool Config::init() {
-    const char* possible_tids[] = {
-        "0100F3100DA46000", // JP
-        "01001CC00FA1A000", // EN
-        "0100BE300FF62000"  // KR
-    };
 
-    std::string atmoPath = "";
-    nn::fs::DirectoryHandle dh;
-    for (const char* tid : possible_tids) {
-        std::string testPath = "ExlSD:/atmosphere/contents/" + std::string(tid);
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, testPath.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
-            nn::fs::CloseDirectory(dh);
-            atmoPath = testPath;
-            break;
-        }
-    }
-
-    if (atmoPath.empty()) return false;
-
-    modsDirectoryPath = atmoPath + "/romfs/mods";
-    nn::fs::CreateDirectory(modsDirectoryPath.c_str());
     nn::fs::CreateDirectory("ExlSD:/MikuMikuSwitchPlugin");
-
     std::string configPath = "ExlSD:/MikuMikuSwitchPlugin/config.toml";
     nn::fs::FileHandle h;
     bool configExists = R_SUCCEEDED(nn::fs::OpenFile(&h, configPath.c_str(), nn::fs::OpenMode_Read));
@@ -297,6 +309,7 @@ bool Config::init() {
         if (result) {
             auto config = std::move(result).table();
             enableMods = config["mods"].value_or(true);
+            enableImGUI = config["imgui"].value_or(true);
             enableDebug = config["debug"].value_or(false);
 
             if (enableMods) {
@@ -310,10 +323,10 @@ bool Config::init() {
             }
 
             // Gameplay Master Toggles
-            enableNewClassics = config["gameplay"]["new_classics"].value_or(false);
+            enableNewClassics = config["gameplay"]["new_classics"].value_or(true);
 
-            challengeTimeMode = config["gameplay"]["challenge_time"].value_or("enabled");
-            removeWatermarks = config["gameplay"]["remove_watermarks"].value_or(true);
+            challengeTimeMode = config["gameplay"]["challenge_time"].value_or("default");
+            removeWatermarks = config["gameplay"]["remove_watermarks"].value_or(false);
             disableHandScaling = config["gameplay"]["disable_hand_scaling"].value_or(false);
             disableLyrics = config["gameplay"]["disable_lyrics"].value_or(false);
             forceJapanese = config["gameplay"]["force_japanese"].value_or(false);
@@ -322,10 +335,16 @@ bool Config::init() {
             skipAdv = config["gameplay"]["skipAdv"].value_or(false);
             enableTouch = config["gameplay"]["enable_touch"].value_or(false);
             enableKeyboard = config["gameplay"]["enable_keyboard"].value_or(false);
-
+            bgmBoost = config["gameplay"]["bgmBoost"].value_or(0);
+            btnBoost = config["gameplay"]["btnBoost"].value_or(0);
+            seBoost = config["gameplay"]["seBoost"].value_or(0);
+            acapellaMode = config["gameplay"]["acapellaMode"].value_or(false);
             nn::hid::g_keyboardModeEnabled = enableKeyboard;
 
             // Graphics
+            no3D = config["graphics"]["no3D"].value_or(false);
+            noMV = config["graphics"]["noMV"].value_or(false);
+            backMV = config["graphics"]["backMV"].value_or(false);
             disableAdp = config["graphics"]["disable_adp"].value_or(false);
             antiAliasing = config["graphics"]["anti_aliasing"].value_or("fxaa");
             enableSss = config["graphics"]["enable_sss"].value_or(false);
@@ -336,6 +355,7 @@ bool Config::init() {
             toneMapMethod = (int)config["graphics"]["tone_map_method"].value_or(-1);
             saturateCoef  = (float)config["graphics"]["saturate_coef"].value_or(-1.0f);
             exposurePse   = (float)config["graphics"]["exposure_pse"].value_or(-1.0f);
+            dim = config["graphics"]["dim"].value_or(-1);
             fxaaQualitySubpix = (float)config["graphics"]["fxaa_subpix"].value_or(-1.0f);
             fxaaQualityEdgeThreshold = (float)config["graphics"]["fxaa_edge_threshold"].value_or(-1.0f);
             fxaaQualityEdgeThresholdMin = (float)config["graphics"]["fxaa_edge_threshold_min"].value_or(-1.0f);
@@ -382,6 +402,29 @@ bool Config::init() {
             enableFtUi = config["leftover"]["ft_ui"].value_or(false);
         }
     }
+
+    const char* possible_tids[] = {
+        "0100F3100DA46000", // JP
+        "01001CC00FA1A000", // EN
+        "0100BE300FF62000"  // KR
+    };
+
+    std::string atmoPath = "";
+    nn::fs::DirectoryHandle dh;
+    for (const char* tid : possible_tids) {
+        std::string testPath = "ExlSD:/atmosphere/contents/" + std::string(tid);
+        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, testPath.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
+            nn::fs::CloseDirectory(dh);
+            atmoPath = testPath;
+            break;
+        }
+    }
+
+    if (atmoPath.empty()) return true;
+
+    modsDirectoryPath = atmoPath + "/romfs/mods";
+    nn::fs::CreateDirectory(modsDirectoryPath.c_str());
+
 
     bool configChanged = !configExists;
 

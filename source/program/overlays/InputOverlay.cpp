@@ -1,7 +1,7 @@
 #include "InputOverlay.hpp"
 #include "imgui/imgui_nvn.h"
 #include <hid.hpp>
-#include "keyboard_sliders.hpp"
+#include "keyboard.hpp"
 #include <cmath>
 
 namespace InputOverlay {
@@ -393,7 +393,7 @@ void DrawKeyboard() {
 
             bool isPressed = false;
             if (key.scancode >= 0 && key.scancode < 256) {
-                isPressed = keyboard_sliders::IsDown(key.scancode);
+                isPressed = keyboard::IsDown(key.scancode);
             }
 
             ImVec2 pMin(curX, curY);

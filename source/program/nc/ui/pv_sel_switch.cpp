@@ -3,8 +3,12 @@
 #include "lib.hpp"
 #include "../diva_nc.hpp"
 #include "../save_data.hpp"
+#include "../../Sound.hpp"
 #include "pv_sel.hpp"
 #include "logger.hpp"
+
+#include "../../overlays/Hints.hpp"
+#include "../../overlays/SongQuickJump.hpp"
 
 struct PVSelectorSwitch
 {
@@ -82,8 +86,8 @@ static void SetGlobalStateSelectedData(const PVSelectorSwitch* sel)
 
 static inline FUNCTION_PTR(bool, __fastcall, IsPlaylistMode, 0x8434e0);
 static inline FUNCTION_PTR(void, __fastcall, PVSelectorSwitchChangeSortFilter, 0x883760, PVSelectorSwitch* a1, int32_t a2);
-static inline FUNCTION_PTR(bool, __fastcall, CheckSongPertainsGlobal, 0x5d4740,
-    const void* data2, int32_t folder_idx, uint32_t folder_idx_dup, int32_t sort_mode, uint32_t difficulty, int32_t edition);
+static inline FUNCTION_PTR(bool, __fastcall, CheckSongPertainsGlobal, 0x5d4740, const void* data2, int32_t folder_idx, uint32_t folder_idx_dup, int32_t sort_mode, uint32_t difficulty, int32_t edition);
+static inline FUNCTION_PTR(bool, __fastcall, IsFadeEnd, 0x41a0b0);
 
 static inline void PVListSetSelectedIndex(PVSelectorSwitch* sel, int32_t index)
 {
@@ -100,14 +104,13 @@ static int32_t GetSelectedIndex(PVSelectorSwitch* sel)
     return pvsel::GetSelectedPVIndex(sel);
 }
 
-// Checks if folder_idx corresponds to the Favorites folder in the given sort mode
 static inline bool IsFavoriteFolder(int32_t sort_mode, int32_t folder_idx)
 {
     switch (sort_mode) {
-        case 0: return folder_idx == 11; // Mode 0 (ABC): 11 is Favorites
-        case 1: return folder_idx == 20; // Mode 1 (Difficulty): 20 is Favorites
-        case 2: return folder_idx == 7;  // Mode 2 (Vocaloid): 7 is Favorites
-        case 3: return folder_idx == 6;  // Mode 3 (Score Rank): 6 is Favorites
+        case 0: return folder_idx == 11;
+        case 1: return folder_idx == 20;
+        case 2: return folder_idx == 7;
+        case 3: return folder_idx == 6;
         default: return false;
     }
 }
@@ -117,13 +120,8 @@ static bool CheckSongPertainsWrapper(PVSelectorSwitch* sel, const pvsel::PvData*
     if (!pv || !pv->data2 || !pv->data2->pv_db_entry)
         return false;
 
-    // CheckSongPertainsGlobal expects param_1 such that *(int*)*param_1 == pv_id.
-    // When checking Favorites, it solely relies on pv_id to query FindScore.
-    // If pv->data2 layout has padding before pv_db_entry, passing pv->data2 directly
-    // causes FindScore to receive garbage. We provide a guaranteed pointer layout here:
     if (IsFavoriteFolder(sel->sort_mode, folder_idx))
     {
-        // Construct a pointer whose first 8 bytes point directly to pv_db_entry
         int32_t* pvid_ptr = pv->data2->pv_db_entry;
         const void* fake_param_1 = &pvid_ptr;
 
@@ -137,7 +135,6 @@ static bool CheckSongPertainsWrapper(PVSelectorSwitch* sel, const pvsel::PvData*
         );
     }
 
-    // For standard categories (Letters, Difficulties, Vocaloids), pass pv->data2 as original code does
     return CheckSongPertainsGlobal(
         pv->data2,
         folder_idx,
@@ -150,7 +147,6 @@ static bool CheckSongPertainsWrapper(PVSelectorSwitch* sel, const pvsel::PvData*
 
 static void CalculateAllSongCountSafe(PVSelectorSwitch* sel)
 {
-    // Reset all category counters
     for (int i = 0; i < 21; i++) {
         sel->song_counts[i] = 0;
     }
@@ -167,8 +163,6 @@ static void CalculateAllSongCountSafe(PVSelectorSwitch* sel)
 
         if (pv->data2 && pv->data2->pv_db_entry) {
             if (pvsel::CheckSongHasStyleAvailable(*pv->data2->pv_db_entry, sel->difficulty, sel->edition, selected_style)) {
-                // Check every folder (0 to 20) without early break.
-                // A song belongs to a letter/vocaloid AND can simultaneously be a Favorite.
                 for (int folder = 0; folder < 21; folder++) {
                     if (CheckSongPertainsWrapper(sel, pv, folder)) {
                         sel->song_counts[folder]++;
@@ -176,7 +170,7 @@ static void CalculateAllSongCountSafe(PVSelectorSwitch* sel)
                 }
             }
         }
-        current += 0x40; // Step size for Switch version
+        current += 0x40;
     }
 }
 
@@ -221,6 +215,12 @@ HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchCreateSortedPVListHook) {
 
 HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchInitHook) {
     static bool Callback(uint64_t a1) {
+
+        SustainAudio::ApplyBoost();
+        Hints::SetPvSelActive(false);
+        Hints::SetSongConfirmActive(false);
+        SongQuickJump::SetPvSelActive(false);
+
         static bool assets_cached = false;
         if (!assets_cached) {
             pvsel::RequestAssetsLoad();
@@ -239,17 +239,50 @@ HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchInitHook) {
 HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchCtrlHook) {
     static bool Callback(PVSelectorSwitch* sel) {
         if (sel->state == 0) {
-            if (!pvsel::CheckAssetsLoaded())
+            if (!pvsel::CheckAssetsLoaded()) {
+                Hints::SetPvSelActive(false);
+                Hints::SetSongConfirmActive(false);
+                SongQuickJump::SetPvSelActive(false);
                 return false;
+            }
         }
         bool ret = Orig(sel);
+
+        // state == 6: Song selection active
         if (sel->state == 6 && pvsel::gs_win) {
+            // 1. Always update gs_win to match vanilla behavior so it hides properly in customize menu
             if (pvsel::gs_win->Ctrl()) {
                 PVSelectorSwitchChangeSortFilter(sel, 0);
                 style_dirty = true;
             }
             pvsel::SetSongToggleable(sel);
+
+            // 2. Filter plugin overlays (Hints & SongQuickJump): display only when customize is closed (is_busy == 0) and fade finished (IsFadeEnd())
+            uint8_t is_busy = *reinterpret_cast<uint8_t*>((uintptr_t)sel + 0x2587C);
+
+            if (is_busy == 0 && IsFadeEnd()) {
+                Hints::ProcessInput();
+                Hints::SetPvSelActive(true);
+                Hints::SetSongConfirmActive(false);
+                SongQuickJump::SetPvSelActive(true, sel);
+            } else {
+                Hints::SetPvSelActive(false);
+                Hints::SetSongConfirmActive(false);
+                SongQuickJump::SetPvSelActive(false);
+            }
         }
+        else if (sel->state == 8) {
+            Hints::ProcessInput();
+            Hints::SetPvSelActive(false);
+            Hints::SetSongConfirmActive(true);
+            SongQuickJump::SetPvSelActive(false);
+        }
+        else {
+            Hints::SetPvSelActive(false);
+            Hints::SetSongConfirmActive(false);
+            SongQuickJump::SetPvSelActive(false);
+        }
+
         SetGlobalStateSelectedData(sel);
         nc::GetSharedData().pv_sel_selected_style = pvsel::GetPreferredStyleOrDefault();
         return ret;
@@ -258,6 +291,11 @@ HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchCtrlHook) {
 
 HOOK_DEFINE_TRAMPOLINE(PVSelectorSwitchDestHook) {
     static bool Callback(uint64_t a1) {
+
+        Hints::SetPvSelActive(false);
+        Hints::SetSongConfirmActive(false);
+        SongQuickJump::SetPvSelActive(false);
+
         pvsel::gs_win.reset();
         return Orig(a1);
     }

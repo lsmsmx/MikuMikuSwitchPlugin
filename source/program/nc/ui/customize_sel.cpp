@@ -16,6 +16,8 @@
 #include "../game/sound_effects.hpp"
 #include "../game/tech_zone.hpp"
 
+#include "../../overlays/Hints.hpp"
+
 namespace CustomizeSelUi
 {
     constexpr int32_t PreviewQueueIndex = 3;
@@ -83,6 +85,10 @@ namespace CustomizeSelUi
             Close();
         else
             Open();
+    }
+
+    bool IsInCustomizeScene() {
+        return s_inCustomizeScene;
     }
 
     static void PlayPreviewCue(const std::string& se_name)
@@ -522,7 +528,7 @@ namespace CustomizeSelUi
         ImGui::End();
     }
 
-    // 1. Task Init (0x778930): Preloads sound farcs into memory on menu entrance
+    // 1. Task Init (0x778930)
     HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskInitHook) {
         static uint64_t Callback(uint64_t a1) {
             uint64_t res = Orig(a1);
@@ -545,7 +551,7 @@ namespace CustomizeSelUi
         }
     };
 
-    // 3. Task Dest (0x778990): Unloads sound farcs on exit
+    // 3. Task Dest (0x778990)
     HOOK_DEFINE_TRAMPOLINE(CustomizeSelTaskDestHook) {
         static uint64_t Callback(uint64_t a1) {
             s_inCustomizeScene = false;
@@ -560,7 +566,7 @@ namespace CustomizeSelUi
         static uint64_t Callback(uint64_t a1) {
             s_inCustomizeScene = true;
             CustomizeSelUi::Update();
-
+            Hints::SetCustomizeSceneActive(); // <-- [ZL] hint
             if (CustomizeSelUi::IsOpen()) {
                 return 1;
             }

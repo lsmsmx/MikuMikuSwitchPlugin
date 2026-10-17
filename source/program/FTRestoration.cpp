@@ -2,6 +2,7 @@
 #include "lib.hpp"
 #include "Config.hpp"
 #include "FTRestoration.hpp"
+#include "nc/diva_nc.hpp"
 
 #define FIX(addr) ((addr) - 0x100)
 
@@ -67,6 +68,15 @@ HOOK_DEFINE_TRAMPOLINE(SSAA_ENABLE) {
         }
     }
 };
+
+static inline bool IsInSongGameplay() {
+    uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
+
+    uint32_t is_play   = *reinterpret_cast<uint32_t*>(base + 0x004D285858);
+    uint32_t is_pv_end = *reinterpret_cast<uint32_t*>(base + 0x00B2E1BBCC);
+
+    return (is_play == 1 && is_pv_end != 1);
+}
 
 // 1. Simplified MAG Filter Hook (FUN_004a0430)
 HOOK_DEFINE_TRAMPOLINE(SetMagFilterHook) {
@@ -161,7 +171,51 @@ HOOK_DEFINE_TRAMPOLINE(GetSaturateCoefHook) {
         }
     }
 };
-// 9. Hook for Render::tone_map (0x004a6cc0)
+
+// 9. Saturate dsc (0x0049cee0)
+HOOK_DEFINE_TRAMPOLINE(RenderSetSaturationHook) {
+    static void Callback(uintptr_t render_ptr, int32_t index, uint32_t flag) {
+        if (!render_ptr) return;
+
+        if (Config::saturateCoef >= 0.0f) {
+            *reinterpret_cast<float*>(render_ptr + (int64_t)index * 4 + 0x17f4) = Config::saturateCoef;
+            *reinterpret_cast<int32_t*>(render_ptr + 0x1288) = 1;
+            *reinterpret_cast<int32_t*>(render_ptr + 0x1a3c) = 1;
+
+            if (index == 1) {
+                *reinterpret_cast<int32_t*>(render_ptr + 0x17e8) = 0;
+            }
+            return;
+        }
+
+        Orig(render_ptr, index, flag & ~1);
+    }
+};
+
+// 10. Render_set_sat_coef (0x4a0190)
+HOOK_DEFINE_TRAMPOLINE(RenderSetSatCoefHook) {
+    static void Callback(float sat, uintptr_t render_ptr, int32_t index, uint32_t flag) {
+        if (!render_ptr) return;
+
+        if (Config::saturateCoef >= 0.0f) {
+            sat = Config::saturateCoef;
+        }
+
+        *reinterpret_cast<float*>(render_ptr + (int64_t)index * 4 + 0x17f4) = sat;
+
+        *reinterpret_cast<int32_t*>(render_ptr + 0x1288) = 1;
+        *reinterpret_cast<int32_t*>(render_ptr + 0x1a3c) = 1;
+
+        *reinterpret_cast<int32_t*>(render_ptr + 0x128c) = 0;
+
+        if (index == 1) {
+            *reinterpret_cast<int32_t*>(render_ptr + 0x17e8) = 0;
+        }
+    }
+};
+
+
+// 11. Render::tone_map set (0x004a6cc0)
 HOOK_DEFINE_TRAMPOLINE(ToneMapHook) {
     static void Callback(uintptr_t render_ptr, uintptr_t a2, uintptr_t a3) {
         if (render_ptr) {
@@ -210,7 +264,10 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
             // Apply fixed scaler only when ADP is disabled
             if (Config::resScaler != 1.0f) {
                 *(float*)(lvar1 + 0x6570907c) = Config::resScaler; // handheld
+                *(float*)(lvar1 + 0x65709080) = Config::resScaler; // docked
+                *(float*)(lvar1 + 0x65709084) = Config::resScaler; // handheld
                 *(float*)(lvar1 + 0x65709088) = Config::resScaler; // docked
+                *(float*)(lvar1 + 0x6570908c) = Config::resScaler; // handheld
             }
             if (Config::shadowIntensity != 1.0f) {
                 *(float*)(lvar1 + 0x65709090) = Config::shadowIntensity;
@@ -564,7 +621,7 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(0x20b040).Write<uint32_t>(ARM64_RET);
         exl::patch::CodePatcher(0x20b060).Write<uint32_t>(ARM64_RET);
 
-        //PatchSettersWithRet();
+        PatchSettersWithRet();
     }
 
     // 2. Anti-Aliasing (MLAA / FXAA / Off)
@@ -737,6 +794,8 @@ void FTRestoration::init() {
     SetPseModifierHook::InstallAtOffset(0x4ae880);
     GetPseModifierHook::InstallAtOffset(0x004ae870);
     GetSaturateCoefHook::InstallAtOffset(0x004a0b50);
+    RenderSetSaturationHook::InstallAtOffset(0x0049cee0);
+    RenderSetSatCoefHook::InstallAtOffset(0x004a0190);
     ToneMapHook::InstallAtOffset(0x4a6cc0);
     SetFxaaParamsHook::InstallAtOffset(0x4a0550);
 
@@ -786,7 +845,7 @@ void FTRestoration::init() {
     }
 
     // Force Disable DOF
-    if (Config::disableDOF) {
+    if (Config::disableDOF || Config::no3D) {
         exl::patch::CodePatcher(0xb2e8b968).Write<uint8_t>(0x01);
         exl::patch::CodePatcher(0x49ba90).Write<uint32_t>(ARM64_RET);
         exl::patch::CodePatcher(0xb2e8b8f4).Write<uint8_t>(0x00);

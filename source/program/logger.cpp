@@ -1,51 +1,54 @@
 #include "fs.hpp"
 #include "lib.hpp"
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
-//
+static nn::fs::FileHandle s_LogHandle;
+static bool s_LogFileReady = false;
+static int64_t s_CurrentFileOffset = 0;
+
+static thread_local bool s_InsideLog = false;
+
+void InitLoggerOnce() {
+    if (s_LogFileReady) return;
+
+    const char* logPath = "ExlSD:/hook_log.txt";
+
+    nn::fs::DeleteFile(logPath);
+    nn::fs::CreateFile(logPath, 0);
+
+    Result res = nn::fs::OpenFile(&s_LogHandle, logPath, nn::fs::OpenMode_Write | nn::fs::OpenMode_Append);
+    if (R_SUCCEEDED(res)) {
+        s_LogFileReady = true;
+        s_CurrentFileOffset = 0;
+    }
+}
+
 void WriteLog(const char* format, ...) {
-     char logBuffer[512];
-     va_list args;
-     va_start(args, format);
-     int len = vsnprintf(logBuffer, sizeof(logBuffer), format, args);
-     va_end(args);
+    if (s_InsideLog) return;
+    s_InsideLog = true;
 
-     if (len <= 0) return;
+    char logBuffer[512];
+    va_list args;
+    va_start(args, format);
+    int len = vsnprintf(logBuffer, sizeof(logBuffer), format, args);
+    va_end(args);
 
-     const char* logPath = "ExlSD:/hook_log.txt";
-     nn::fs::FileHandle handle;
-     std::vector<uint8_t> fileBuffer;
+    if (len > 0) {
+        InitLoggerOnce();
 
-     Result res = nn::fs::OpenFile(&handle, logPath, nn::fs::OpenMode_Write);
-     if (R_FAILED(res)) {
-         nn::fs::CreateFile(logPath, 0);
-         res = nn::fs::OpenFile(&handle, logPath, nn::fs::OpenMode_Write);
-     }
+        if (s_LogFileReady) {
+            nn::fs::WriteFile(
+                s_LogHandle,
+                s_CurrentFileOffset,
+                logBuffer,
+                len,
+                nn::fs::WriteOption::CreateOption(0)
+            );
+            s_CurrentFileOffset += len;
+        }
+    }
 
-     if (R_SUCCEEDED(res)) {
-         int64_t fileSize = 0;
-         nn::fs::GetFileSize(&fileSize, handle);
-         if (fileSize > 0) {
-             fileBuffer.resize(fileSize);
-             nn::fs::ReadFile(handle, 0, fileBuffer.data(), fileSize);
-         }
-         nn::fs::CloseFile(handle);
-     }
-
-     size_t oldSize = fileBuffer.size();
-     fileBuffer.resize(oldSize + len);
-     std::memcpy(fileBuffer.data() + oldSize, logBuffer, len);
-
-     nn::fs::DeleteFile(logPath);
-     nn::fs::CreateFile(logPath, fileBuffer.size());
-
-     if (R_SUCCEEDED(nn::fs::OpenFile(&handle, logPath, nn::fs::OpenMode_Write))) {
-         nn::fs::WriteFile(
-             handle,
-             0,
-             fileBuffer.data(),
-             fileBuffer.size(),
-             nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush)
-         );
-         nn::fs::CloseFile(handle);
-     }
+    s_InsideLog = false;
 }

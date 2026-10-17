@@ -17,7 +17,10 @@
 namespace nc {
     void init() {
 
-        if (!Config::enableNewClassics) return;
+        if (Config::enableNewClassics) {
+            pvsel::init();
+            results::init();
+        }
 
         game::init();
         input::init();
@@ -26,10 +29,6 @@ namespace nc {
         target::init();
 
         mod_nc::init();
-
-        pvsel::init();
-        CustomizeSelUi::Init();
-        results::init();
 
         nc::init_save_data();
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "lib.hpp"
-#include "keyboard_sliders.hpp"
+#include "keyboard.hpp"
 #include <stdint.h>
 #include <cmath>
 #include <nn/os.hpp>
@@ -123,7 +123,7 @@ namespace nn::hid {
         if (GetNpadStateHandheld) {
             GetNpadStateHandheld(&merged, CONTROLLER_HANDHELD);
             if ((merged.attributes & 1) != 0) {
-                keyboard_sliders::Inject(&merged);
+                keyboard::Inject(&merged);
                 cached_state = merged;
                 return merged;
             }
@@ -142,7 +142,7 @@ namespace nn::hid {
         merged.buttons |= sFK.buttons | sJD.buttons;
         merge_sticks(sFK); merge_sticks(sJD);
 
-        keyboard_sliders::Inject(&merged);
+        keyboard::Inject(&merged);
 
         cached_state = merged;
         return merged;

@@ -222,14 +222,14 @@ HOOK_DEFINE_TRAMPOLINE(StageResultPS4DispHook) {
 
 void InstallResultPS4Hooks()
 {
-	PutScoreWindowInHook::InstallAtOffset(0x158080);
-	PutWinCountHook::InstallAtOffset(0x158240);
-	PutWinLoopHook::InstallAtOffset(0x1587d0);
-	PutWinOutHook::InstallAtOffset(0x1589e0);
-	StageResultPS4InitHook::InstallAtOffset(0x154d70);
-	StageResultPS4CtrlHook::InstallAtOffset(0x1553f0);
-	StageResultPS4DestHook::InstallAtOffset(0x1599e0);
-	StageResultPS4DispHook::InstallAtOffset(0x159ce0);
-
-	WriteDispAetSceneIDHook::InstallAtOffset(0x15a0a8);
+	// PutScoreWindowInHook::InstallAtOffset(0x158080);
+	// PutWinCountHook::InstallAtOffset(0x158240);
+	// PutWinLoopHook::InstallAtOffset(0x1587d0);
+	// PutWinOutHook::InstallAtOffset(0x1589e0);
+	// StageResultPS4InitHook::InstallAtOffset(0x154d70);
+	// StageResultPS4CtrlHook::InstallAtOffset(0x1553f0);
+	// StageResultPS4DestHook::InstallAtOffset(0x1599e0);
+	// StageResultPS4DispHook::InstallAtOffset(0x159ce0);
+ //
+	// WriteDispAetSceneIDHook::InstallAtOffset(0x15a0a8);
 }

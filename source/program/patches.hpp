@@ -1,6 +1,11 @@
 #pragma once
 #include "lib.hpp"
 #include "Config.hpp"
+#include "logger.hpp"
+#include "ModLoader.hpp"
+#include "overlays/Hints.hpp"
+
+#include "nc/diva_nc.hpp"
 
 #define FIX(addr) ((addr) - 0x100)
 
@@ -51,7 +56,31 @@ HOOK_DEFINE_TRAMPOLINE(TaskAdvLogo) {
     }
 };
 
+HOOK_DEFINE_INLINE(ClearMovieSurfaceFrontInlineHook) {
+    static void Callback(exl::hook::InlineCtx* ctx) {
+        uintptr_t range_ptr = ctx->X[0];
+        if (range_ptr == 0) return;
+
+        char** str_start_ptr = reinterpret_cast<char**>(range_ptr);
+        char** str_end_ptr   = str_start_ptr + 1;
+
+        char* str_start = *str_start_ptr;
+        char* str_end   = *str_end_ptr;
+
+        if (str_start && str_end > str_start) {
+            size_t len = str_end - str_start;
+            if (len == 5 && std::memcmp(str_start, "FRONT", 5) == 0) {
+                *str_end_ptr = str_start;
+                str_start[0] = '\0';
+            }
+        }
+    }
+};
+
 inline void ApplyCustomPatches() {
+
+    // fix custom hairs with "ng=1" not appearing
+    exl::patch::CodePatcher(0x3bbf70).Write<uint32_t>(0x52800008);
 
     // Challenge Time Handling (3 Modes: "enabled", "disabled", "default")
     if (Config::challengeTimeMode == "enabled") {
@@ -100,6 +129,16 @@ inline void ApplyCustomPatches() {
         exl::patch::CodePatcher(0xAE7EA8).Write<uint64_t>(0x00347370646F6D2D);
         exl::patch::CodePatcher(0xACC6DF).Write<uint8_t>(0x00);
     }
+    // 6. No movies
+    if (Config::noMV) {
+        exl::patch::CodePatcher(0x004CA9A0).Write<uint32_t>(0x1400006A);
+        exl::patch::CodePatcher(0x004CAB54).Write<uint32_t>(0x14000081);
+    }
+
+    // 7. Movie_pv_type to not be FRONT for all vids
+    if (Config::backMV) {
+        ClearMovieSurfaceFrontInlineHook::InstallAtOffset(0x004CADF8);
+    }
 
     // Core patches: Module limits
     exl::patch::CodePatcher(ADDR_MOD_LIMIT_1 + 8).Write<uint32_t>(0x2A0103E8);
@@ -129,4 +168,5 @@ inline void ApplyCustomPatches() {
     // Effect and open lyrics limits
     exl::patch::CodePatcher(ADDR_EFF_LIMIT).Write<uint32_t>(0x7103FC3F);
     exl::patch::CodePatcher(ADDR_LYRIC_LIMIT).Write<uint32_t>(0xF10FA27F);
+
 }

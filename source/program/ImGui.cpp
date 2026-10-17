@@ -1,471 +1,57 @@
 #include "ImGui.hpp"
 #include "macros.hpp"
-#include <nn/fs.hpp>
 #include <nn/os.hpp>
 #include <hid.hpp>
-#include <cstdio>
-#include <cstring>
-#include <string>
 #include <algorithm>
 #include <cmath>
-#include <vector>
-#include <set>
 
-#include "DebugMode.hpp"
-#include "keyboard_sliders.hpp"
+#include "FontLoader.hpp"
+#include "keyboard.hpp"
+#include "Config.hpp"
 
+#include "overlays/ExtraMenu.hpp"
 #include "overlays/InputOverlay.hpp"
 #include "overlays/StateSwitcher.hpp"
 #include "overlays/MemoryScannerUi.hpp"
 #include "overlays/ResScalerUI.hpp"
 #include "overlays/PostProcessUI.hpp"
 #include "overlays/FpsOverlay.hpp"
-
+#include "overlays/MotionPlayerUi.hpp"
+#include "overlays/WindControl.hpp"
+#include "overlays/SongQuickJump.hpp"
+#include "overlays/DimOverlay.hpp"
+#include "overlays/VolumeOverlay.hpp"
+#include "overlays/SaveBackup.hpp"
+#include "overlays/Hints.hpp"
+#include "overlays/VirtualKeyboard.hpp"
+#include "overlays/PluginHelpUi.hpp"
 #include "nc/ui/customize_sel.hpp"
 
 #include "nvn_hooks.hpp"
 #include "backend/imgui_backend/imgui_impl_nvn.hpp"
 #include "backend/imgui_alloc.hpp"
 
-
 #ifndef IMNVNFUNC
 #define IMNVNFUNC __attribute__((visibility("default")))
 #endif
-
-#define ADDR_UPDATE_BONES FIX(0x00252A70)
 
 namespace ImGui {
 
     bool g_isMenuOpen = false;
     bool g_imguiHasFocus = true;
 
-    static float* mikupos_a1[9999];
-    static float* mikupos_a2[9999];
-    static int mikuposptrcounter = 0;
-    static int curmikupos = 0;
-    static bool mikuoverride = false;
-    static bool mikushowall = false;
-    static int mikupos_a3[9999], mikupos_a4[9999], mikupos_a5[9999];
-
-    static int g_maxBones = 0;
-
     static float g_cursorX = 640.0f;
     static float g_cursorY = 360.0f;
 
-    // =====================================
-    // DUMP STRUCTURES
-    // =====================================
-    struct FloatChange {
-        int boneId;
-        int arrType;
-        int idx;
-        float val;
-    };
-
-    struct DumpFrame {
-        int framePct;
-        std::vector<FloatChange> changes;
-    };
-
-    struct FloatSig {
-        int boneId, arrType, idx;
-        bool operator<(const FloatSig& o) const {
-            if (boneId != o.boneId) return boneId < o.boneId;
-            if (arrType != o.arrType) return arrType < o.arrType;
-            return idx < o.idx;
-        }
-    };
-
-    struct AnimDumpMemory {
-        std::vector<DumpFrame> frames;
-        bool hasData = false;
-        int maxFrame = 0;
-    };
-
-    struct DumpFileInfo {
-        std::string relPath;
-        std::string fileName;
-    };
-
-    // =====================================
-    // RECORDING SYSTEM
-    // =====================================
-    int g_recordState = 0;
-    int g_recordFrameCounter = 0;
-    int g_silenceCounter = 0;
-
-    AnimDumpMemory g_recordBuffer;
-    std::set<FloatSig> g_activeFloats;
-
-    static float g_baseSnapshot_a1[1000][24];
-    static float g_baseSnapshot_a2[1000][24];
-    static float g_prevSnapshot_a1[1000][24];
-    static float g_prevSnapshot_a2[1000][24];
-    static bool g_hasBaseSnapshot = false;
-
-    // =====================================
-    // PLAYBACK SYSTEM
-    // =====================================
-    struct DynamicSlot {
-        bool enabled = true;
-        int selectedIndex = -1;
-        float currentFrame = 0.0f;
-        AnimDumpMemory dump;
-    };
-
-    std::vector<DynamicSlot> g_slots;
-    std::vector<DumpFileInfo> g_allFiles;
-
-    bool g_showUltimatePlayer = false;
-    bool g_ultimateEnable = false;
-
-    void EnsureDirectories() {
-        nn::fs::DirectoryHandle dir;
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, "ExlSD:/MikuMikuSwitchPlugin/Dumps", 1))) {
-            nn::fs::CloseDirectory(dir);
-        } else {
-            nn::fs::CreateDirectory("ExlSD:/MikuMikuSwitchPlugin/Dumps");
-        }
-    }
-
-    void RefreshFiles() {
-        EnsureDirectories();
-        g_allFiles.clear();
-
-        const char* baseDir = "ExlSD:/MikuMikuSwitchPlugin/Dumps";
-        nn::fs::DirectoryHandle dir;
-        int64_t readCount;
-        nn::fs::DirectoryEntry entry;
-
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, baseDir, 2))) {
-            while (R_SUCCEEDED(nn::fs::ReadDirectory(&readCount, &entry, dir, 1)) && readCount > 0) {
-                std::string fname = entry.m_Name;
-                if (fname.find(".txt") != std::string::npos) {
-                    DumpFileInfo info;
-                    info.relPath = fname;
-                    info.fileName = fname;
-                    g_allFiles.push_back(info);
-                }
-            }
-            nn::fs::CloseDirectory(dir);
-        }
-
-        std::vector<std::string> subFolders;
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, baseDir, 1))) {
-            while (R_SUCCEEDED(nn::fs::ReadDirectory(&readCount, &entry, dir, 1)) && readCount > 0) {
-                std::string dname = entry.m_Name;
-                if (dname != "." && dname != "..") {
-                    subFolders.push_back(dname);
-                }
-            }
-            nn::fs::CloseDirectory(dir);
-        }
-
-        for (const auto& folder : subFolders) {
-            char subPath[256];
-            snprintf(subPath, sizeof(subPath), "%s/%s", baseDir, folder.c_str());
-
-            if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, subPath, 2))) {
-                while (R_SUCCEEDED(nn::fs::ReadDirectory(&readCount, &entry, dir, 1)) && readCount > 0) {
-                    std::string fname = entry.m_Name;
-                    if (fname.find(".txt") != std::string::npos) {
-                        DumpFileInfo info;
-                        info.relPath = folder + "/" + fname;
-                        info.fileName = fname;
-                        g_allFiles.push_back(info);
-                    }
-                }
-                nn::fs::CloseDirectory(dir);
-            }
-        }
-
-        for (auto& slot : g_slots) {
-            if (slot.selectedIndex >= (int)g_allFiles.size()) {
-                slot.selectedIndex = -1;
-                slot.dump.hasData = false;
-            }
-        }
-    }
-
-    std::string GenerateDumpFilename() {
-        for (int i = 1; i <= 999; i++) {
-            char fname[64];
-            snprintf(fname, sizeof(fname), "motion_dump_%d.txt", i);
-            char path[128];
-            snprintf(path, sizeof(path), "ExlSD:/MikuMikuSwitchPlugin/Dumps/%s", fname);
-
-            nn::fs::FileHandle h;
-            if (R_FAILED(nn::fs::OpenFile(&h, path, nn::fs::OpenMode_Read))) {
-                return std::string(fname);
-            }
-            nn::fs::CloseFile(h);
-        }
-        return "motion_dump_999.txt";
-    }
-
-    void SaveDumpToSD() {
-        EnsureDirectories();
-        std::string filename = GenerateDumpFilename();
-        char path[128];
-        snprintf(path, sizeof(path), "ExlSD:/MikuMikuSwitchPlugin/Dumps/%s", filename.c_str());
-
-        std::string outData = "";
-        char buf[128];
-
-        snprintf(buf, sizeof(buf), "Frame 0\n");
-        outData += buf;
-        for (const auto& sig : g_activeFloats) {
-            float v = (sig.arrType == 1) ? g_baseSnapshot_a1[sig.boneId][sig.idx] : g_baseSnapshot_a2[sig.boneId][sig.idx];
-            snprintf(buf, sizeof(buf), "B %d %d %d %f\n", sig.boneId, sig.arrType, sig.idx, v);
-            outData += buf;
-        }
-
-        for (const auto& frame : g_recordBuffer.frames) {
-            snprintf(buf, sizeof(buf), "Frame %d\n", frame.framePct);
-            outData += buf;
-            for (const auto& c : frame.changes) {
-                snprintf(buf, sizeof(buf), "B %d %d %d %f\n", c.boneId, c.arrType, c.idx, c.val);
-                outData += buf;
-            }
-        }
-
-        nn::fs::DeleteFile(path);
-        nn::fs::CreateFile(path, outData.length());
-
-        nn::fs::FileHandle h;
-        if (R_SUCCEEDED(nn::fs::OpenFile(&h, path, nn::fs::OpenMode_Write))) {
-            nn::fs::WriteFile(h, 0, outData.c_str(), outData.length(), nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
-            nn::fs::CloseFile(h);
-        }
-    }
-
-    void LoadDumpToSlot(DynamicSlot& slot) {
-        if (slot.selectedIndex < 0 || slot.selectedIndex >= (int)g_allFiles.size()) {
-            slot.dump.hasData = false;
-            return;
-        }
-
-        char path[256];
-        snprintf(path, sizeof(path), "ExlSD:/MikuMikuSwitchPlugin/Dumps/%s", g_allFiles[slot.selectedIndex].relPath.c_str());
-
-        nn::fs::FileHandle h;
-        if (R_SUCCEEDED(nn::fs::OpenFile(&h, path, nn::fs::OpenMode_Read))) {
-            int64_t sz = 0;
-            nn::fs::GetFileSize(&sz, h);
-
-            std::vector<char> buf(sz + 1);
-            nn::fs::ReadFile(h, 0, buf.data(), sz);
-            nn::fs::CloseFile(h);
-            buf[sz] = '\0';
-
-            slot.dump.frames.clear();
-            slot.dump.hasData = false;
-            slot.dump.maxFrame = 0;
-
-            DumpFrame currentFrame;
-            bool hasFrame = false;
-
-            char* line = strtok(buf.data(), "\r\n");
-            while (line != nullptr) {
-                if (strncmp(line, "Frame", 5) == 0) {
-                    if (hasFrame) slot.dump.frames.push_back(currentFrame);
-                    currentFrame.changes.clear();
-                    sscanf(line, "Frame %d", &currentFrame.framePct);
-                    hasFrame = true;
-                }
-                else if (strncmp(line, "B", 1) == 0) {
-                    FloatChange c;
-                    sscanf(line, "B %d %d %d %f", &c.boneId, &c.arrType, &c.idx, &c.val);
-                    currentFrame.changes.push_back(c);
-                }
-                line = strtok(nullptr, "\r\n");
-            }
-            if (hasFrame) slot.dump.frames.push_back(currentFrame);
-
-            if (slot.dump.frames.size() > 1) {
-                for (size_t i = 1; i < slot.dump.frames.size(); i++) {
-                    for (const auto& prevC : slot.dump.frames[i-1].changes) {
-                        bool found = false;
-                        for (const auto& curC : slot.dump.frames[i].changes) {
-                            if (curC.boneId == prevC.boneId && curC.arrType == prevC.arrType && curC.idx == prevC.idx) {
-                                found = true; break;
-                            }
-                        }
-                        if (!found) {
-                            slot.dump.frames[i].changes.push_back(prevC);
-                        }
-                    }
-                }
-            }
-
-            slot.dump.hasData = !slot.dump.frames.empty();
-            if (slot.dump.hasData) {
-                slot.dump.maxFrame = slot.dump.frames.back().framePct;
-            }
-        }
-    }
-
-    void ApplySlotPlaybackLerp(DynamicSlot& slot, int boneId, float* out_a1, float* out_a2) {
-        if (!slot.enabled || !slot.dump.hasData || slot.dump.frames.empty()) return;
-
-        float targetPct = slot.currentFrame;
-        const DumpFrame* leftFrame = &slot.dump.frames.front();
-        const DumpFrame* rightFrame = &slot.dump.frames.back();
-
-        for (size_t i = 0; i < slot.dump.frames.size() - 1; i++) {
-            if (targetPct >= slot.dump.frames[i].framePct && targetPct <= slot.dump.frames[i+1].framePct) {
-                leftFrame = &slot.dump.frames[i];
-                rightFrame = &slot.dump.frames[i+1];
-                break;
-            }
-        }
-
-        float factor = (rightFrame->framePct == leftFrame->framePct) ? 0.0f : (targetPct - leftFrame->framePct) / (float)(rightFrame->framePct - leftFrame->framePct);
-
-        for (const auto& lb : leftFrame->changes) {
-            if (lb.boneId == boneId) {
-                float rightVal = lb.val;
-                for (const auto& rb : rightFrame->changes) {
-                    if (rb.boneId == boneId && rb.arrType == lb.arrType && rb.idx == lb.idx) {
-                        rightVal = rb.val; break;
-                    }
-                }
-
-                float lerped = lb.val + (rightVal - lb.val) * factor;
-                if (lb.arrType == 1) out_a1[lb.idx] = lerped;
-                if (lb.arrType == 2) out_a2[lb.idx] = lerped;
-            }
-        }
-    }
-
-    // =====================================
-    // BONE UPDATE HOOK
-    // =====================================
-    HOOK_DEFINE_TRAMPOLINE(BonesUpdateHook) {
-        static uint64_t Callback(float* a1, float* a2, uint32_t a3, uint32_t a4, uint32_t a5) {
-
-            if (mikuposptrcounter == -1) {
-                mikuposptrcounter = 0;
-
-                if (g_maxBones > 0) {
-                    if (g_recordState == 1) {
-                        if (!g_hasBaseSnapshot) {
-                            for (int i = 0; i < g_maxBones && i < 1000; i++) {
-                                if (mikupos_a1[i]) std::memcpy(g_baseSnapshot_a1[i], mikupos_a1[i], sizeof(float)*24);
-                                if (mikupos_a2[i]) std::memcpy(g_baseSnapshot_a2[i], mikupos_a2[i], sizeof(float)*24);
-                            }
-                            g_hasBaseSnapshot = true;
-                        }
-
-                        bool motionStarted = false;
-                        for (int i = 0; i < g_maxBones && i < 1000; i++) {
-                            if (!mikupos_a1[i] || !mikupos_a2[i]) continue;
-                            for (int j = 0; j < 24; j++) {
-                                if (j == 8) continue;
-                                if (std::abs(g_baseSnapshot_a1[i][j] - mikupos_a1[i][j]) > 0.0001f ||
-                                    std::abs(g_baseSnapshot_a2[i][j] - mikupos_a2[i][j]) > 0.0001f) {
-                                    motionStarted = true; break;
-                                }
-                            }
-                            if (motionStarted) break;
-                        }
-
-                        if (motionStarted) {
-                            g_recordState = 2; g_recordFrameCounter = 0; g_silenceCounter = 0;
-                            g_recordBuffer.frames.clear(); g_activeFloats.clear();
-
-                            for (int i = 0; i < g_maxBones && i < 1000; i++) {
-                                if (mikupos_a1[i]) std::memcpy(g_prevSnapshot_a1[i], mikupos_a1[i], sizeof(float)*24);
-                                if (mikupos_a2[i]) std::memcpy(g_prevSnapshot_a2[i], mikupos_a2[i], sizeof(float)*24);
-                            }
-                        }
-                    }
-                    else if (g_recordState == 2) {
-                        g_recordFrameCounter++;
-                        bool changedThisFrame = false;
-
-                        for (int i = 0; i < g_maxBones && i < 1000; i++) {
-                            if (!mikupos_a1[i] || !mikupos_a2[i]) continue;
-                            for (int j = 0; j < 24; j++) {
-                                if (j == 8) continue;
-                                if (std::abs(g_prevSnapshot_a1[i][j] - mikupos_a1[i][j]) > 0.0001f ||
-                                    std::abs(g_prevSnapshot_a2[i][j] - mikupos_a2[i][j]) > 0.0001f) {
-                                    changedThisFrame = true;
-                                    g_prevSnapshot_a1[i][j] = mikupos_a1[i][j];
-                                    g_prevSnapshot_a2[i][j] = mikupos_a2[i][j];
-                                }
-                            }
-                        }
-
-                        if (changedThisFrame) g_silenceCounter = 0; else g_silenceCounter++;
-
-                        if (g_recordFrameCounter % 5 == 0) {
-                            DumpFrame diffFrame;
-                            diffFrame.framePct = g_recordFrameCounter;
-
-                            for (int i = 0; i < g_maxBones && i < 1000; i++) {
-                                if (!mikupos_a1[i] || !mikupos_a2[i]) continue;
-                                for (int j = 0; j < 24; j++) {
-                                    if (j == 8) continue;
-                                    if (std::abs(g_baseSnapshot_a1[i][j] - mikupos_a1[i][j]) > 0.0001f) {
-                                        diffFrame.changes.push_back({i, 1, j, mikupos_a1[i][j]});
-                                        g_activeFloats.insert({i, 1, j});
-                                    }
-                                    if (std::abs(g_baseSnapshot_a2[i][j] - mikupos_a2[i][j]) > 0.0001f) {
-                                        diffFrame.changes.push_back({i, 2, j, mikupos_a2[i][j]});
-                                        g_activeFloats.insert({i, 2, j});
-                                    }
-                                }
-                            }
-                            if (!diffFrame.changes.empty()) g_recordBuffer.frames.push_back(diffFrame);
-                        }
-
-                        if (g_silenceCounter >= 30) {
-                            int trueEndFrame = g_recordFrameCounter - 30;
-                            while (g_recordBuffer.frames.size() > 1 && g_recordBuffer.frames.back().framePct > trueEndFrame) {
-                                g_recordBuffer.frames.pop_back();
-                            }
-
-                            SaveDumpToSD();
-                            g_recordState = 0;
-                            RefreshFiles();
-                        }
-                    }
-                }
-            }
-
-            uint64_t output;
-
-            if (mikuoverride) {
-                output = Orig(a1, a2, mikupos_a3[mikuposptrcounter], mikupos_a4[mikuposptrcounter], mikupos_a5[mikuposptrcounter]);
-            } else {
-                output = Orig(a1, a2, a3, a4, a5);
-            }
-
-            if (g_ultimateEnable) {
-                for (auto& slot : g_slots) {
-                    ApplySlotPlaybackLerp(slot, mikuposptrcounter, a1, a2);
-                }
-            }
-
-            if (!mikuoverride) {
-                mikupos_a1[mikuposptrcounter] = a1; mikupos_a2[mikuposptrcounter] = a2;
-                mikupos_a3[mikuposptrcounter] = a3; mikupos_a4[mikuposptrcounter] = a4; mikupos_a5[mikuposptrcounter] = a5;
-            }
-
-            mikuposptrcounter++;
-            if (mikuposptrcounter > g_maxBones) g_maxBones = mikuposptrcounter;
-
-            if (mikuposptrcounter >= 9999) mikuposptrcounter = 0;
-            return output;
-        }
-    };
-
     void Init() {
-        RefreshFiles();
         MemoryScannerUi::Init();
-
-        BonesUpdateHook::InstallAtOffset(ADDR_UPDATE_BONES);
+        MotionPlayerUi::Init();
+        WindControl::Init();
+        if (Config::enableNewClassics) {
+            CustomizeSelUi::Init();
+        }
+        PluginHelpUi::Init();
+        Hints::Init();
     }
 }
 
@@ -479,48 +65,53 @@ extern "C" IMNVNFUNC void nvnImguiInitialize() {
 
     ImGuiStyle& style = ImGui::GetStyle();
 
-    // 1. Text: pure white
+    style.WindowRounding    = 10.0f;
+    style.ChildRounding     = 8.0f;
+    style.FrameRounding     = 6.0f;
+    style.PopupRounding     = 8.0f;
+    style.ScrollbarRounding = 9.0f;
+    style.GrabRounding      = 6.0f;
+    style.TabRounding       = 6.0f;
+
+    style.WindowBorderSize  = 1.2f;
+    style.FrameBorderSize   = 1.0f;
+    style.WindowPadding     = ImVec2(10.0f, 10.0f);
+    style.FramePadding      = ImVec2(8.0f, 7.0f);
+
     style.Colors[ImGuiCol_Text]                  = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    style.Colors[ImGuiCol_TextDisabled]          = ImVec4(0.60f, 0.75f, 0.73f, 1.00f);
+    style.Colors[ImGuiCol_TextDisabled]          = ImVec4(0.55f, 0.65f, 0.70f, 1.00f);
 
-    // 2. Windows & Titlebars: Miku dark cyan background
-    style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.06f, 0.16f, 0.15f, 0.88f);
-    style.Colors[ImGuiCol_TitleBg]               = ImVec4(0.12f, 0.38f, 0.36f, 0.90f);
-    style.Colors[ImGuiCol_TitleBgActive]         = ImVec4(0.18f, 0.58f, 0.55f, 1.00f);
-    style.Colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(0.08f, 0.25f, 0.24f, 0.75f);
+    style.Colors[ImGuiCol_WindowBg]              = ImVec4(0.07f, 0.09f, 0.11f, 0.94f);
 
-    // 3. Buttons: bright Miku #47dfd3 teal base, ultra bright on hover
-    style.Colors[ImGuiCol_Button]                = ImVec4(0.24f, 0.75f, 0.71f, 0.65f);
-    style.Colors[ImGuiCol_ButtonHovered]         = ImVec4(0.33f, 0.95f, 0.90f, 0.85f);
-    style.Colors[ImGuiCol_ButtonActive]          = ImVec4(0.16f, 0.52f, 0.49f, 0.95f);
+    style.Colors[ImGuiCol_TitleBg]               = ImVec4(0.04f, 0.05f, 0.07f, 0.96f);
+    style.Colors[ImGuiCol_TitleBgActive]         = ImVec4(0.08f, 0.11f, 0.14f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(0.03f, 0.04f, 0.05f, 0.80f);
 
-    // 4. Headers & Collapsing tabs
-    style.Colors[ImGuiCol_Header]                = ImVec4(0.24f, 0.75f, 0.71f, 0.60f);
-    style.Colors[ImGuiCol_HeaderHovered]         = ImVec4(0.33f, 0.95f, 0.90f, 0.85f);
-    style.Colors[ImGuiCol_HeaderActive]          = ImVec4(0.16f, 0.52f, 0.49f, 0.95f);
+    style.Colors[ImGuiCol_Button]                = ImVec4(0.18f, 0.22f, 0.27f, 0.85f);
+    style.Colors[ImGuiCol_ButtonHovered]         = ImVec4(0.24f, 0.30f, 0.37f, 0.95f);
+    style.Colors[ImGuiCol_ButtonActive]          = ImVec4(0.14f, 0.18f, 0.22f, 1.00f);
 
-    // 5. Frames & Dropdowns
-    style.Colors[ImGuiCol_FrameBg]               = ImVec4(0.10f, 0.30f, 0.28f, 0.60f);
-    style.Colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.20f, 0.60f, 0.57f, 0.75f);
-    style.Colors[ImGuiCol_FrameBgActive]         = ImVec4(0.16f, 0.52f, 0.49f, 0.95f);
+    style.Colors[ImGuiCol_Header]                = ImVec4(0.16f, 0.20f, 0.25f, 0.80f);
+    style.Colors[ImGuiCol_HeaderHovered]         = ImVec4(0.22f, 0.28f, 0.35f, 0.90f);
+    style.Colors[ImGuiCol_HeaderActive]          = ImVec4(0.14f, 0.18f, 0.22f, 1.00f);
 
-    // 6. Sliders
-    style.Colors[ImGuiCol_SliderGrab]            = ImVec4(0.33f, 0.95f, 0.90f, 0.85f);
-    style.Colors[ImGuiCol_SliderGrabActive]      = ImVec4(0.20f, 0.65f, 0.62f, 1.00f);
+    style.Colors[ImGuiCol_FrameBg]               = ImVec4(0.10f, 0.13f, 0.16f, 0.85f);
+    style.Colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.15f, 0.19f, 0.24f, 0.90f);
+    style.Colors[ImGuiCol_FrameBgActive]         = ImVec4(0.12f, 0.15f, 0.19f, 1.00f);
 
-    // 7. Scrollbars
-    style.Colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.05f, 0.14f, 0.13f, 0.50f);
-    style.Colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.22f, 0.68f, 0.65f, 0.60f);
-    style.Colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.33f, 0.95f, 0.90f, 0.80f);
-    style.Colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.16f, 0.52f, 0.49f, 0.95f);
+    style.Colors[ImGuiCol_SliderGrab]            = ImVec4(0.82f, 0.85f, 0.87f, 0.90f);
+    style.Colors[ImGuiCol_SliderGrabActive]      = ImVec4(1.00f, 0.47f, 0.71f, 1.00f);
 
-    // 8. Checkmarks & Borders
-    style.Colors[ImGuiCol_CheckMark]             = ImVec4(0.33f, 0.95f, 0.90f, 1.00f);
-    style.Colors[ImGuiCol_Border]                = ImVec4(0.28f, 0.88f, 0.83f, 0.45f);
-    style.Colors[ImGuiCol_Separator]             = ImVec4(0.28f, 0.88f, 0.83f, 0.45f);
+    style.Colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.05f, 0.06f, 0.08f, 0.60f);
+    style.Colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.18f, 0.22f, 0.27f, 0.80f);
+    style.Colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.25f, 0.30f, 0.37f, 0.90f);
+    style.Colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.14f, 0.18f, 0.22f, 1.00f);
 
-    ImGui::GetIO().Fonts->AddFontDefault();
-    ImGui::GetIO().Fonts->Build();
+    style.Colors[ImGuiCol_CheckMark]             = ImVec4(1.00f, 0.47f, 0.71f, 1.00f);
+    style.Colors[ImGuiCol_Border]                = ImVec4(1.00f, 1.00f, 1.00f, 0.15f);
+    style.Colors[ImGuiCol_Separator]             = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
+
+    FontLoader::LoadFonts(ImGui::GetIO());
 }
 
 extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
@@ -602,14 +193,51 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         fps_hold_timer = 0.0f;
     }
 
-    // Input Overlay Hotkey: L3 + R3 (without ZL, ZR, and without Plus)
+    // Dim Overlay Hotkey: L3 + R3 + L
+    static float dim_hold_timer = 0.0f;
+    bool isDimCombo = (npad.buttons & nn::hid::Button::LStick) &&
+                      (npad.buttons & nn::hid::Button::RStick) &&
+                      (npad.buttons & nn::hid::Button::L);
+
+    if (isDimCombo) {
+        dim_hold_timer += dt;
+        if (dim_hold_timer >= 0.8f && (dim_hold_timer - dt) < 0.8f) {
+            DimOverlay::g_showWindow = !DimOverlay::g_showWindow;
+            if (DimOverlay::g_showWindow) {
+                ImGui::g_imguiHasFocus = true;
+            }
+        }
+    } else {
+        dim_hold_timer = 0.0f;
+    }
+
+    // Volume Overlay Hotkey: L3 + R3 + R
+    static float vol_hold_timer = 0.0f;
+    bool isVolCombo = (npad.buttons & nn::hid::Button::LStick) &&
+                      (npad.buttons & nn::hid::Button::RStick) &&
+                      (npad.buttons & nn::hid::Button::R);
+
+    if (isVolCombo) {
+        vol_hold_timer += dt;
+        if (vol_hold_timer >= 0.8f && (vol_hold_timer - dt) < 0.8f) {
+            VolumeOverlay::g_showWindow = !VolumeOverlay::g_showWindow;
+            if (VolumeOverlay::g_showWindow) {
+                ImGui::g_imguiHasFocus = true;
+            }
+        }
+    } else {
+        vol_hold_timer = 0.0f;
+    }
+
+    // Input Overlay Hotkey: L3 + R3 (without ZL, ZR, L, R, and without Plus)
     static float overlay_hold_timer = 0.0f;
     bool isOverlayCombo = (npad.buttons & nn::hid::Button::LStick) &&
                           (npad.buttons & nn::hid::Button::RStick) &&
                           !(npad.buttons & nn::hid::Button::ZL) &&
                           !(npad.buttons & nn::hid::Button::ZR) &&
+                          !(npad.buttons & nn::hid::Button::L) &&
+                          !(npad.buttons & nn::hid::Button::R) &&
                           !(npad.buttons & nn::hid::Button::Plus);
-
 
     if (isOverlayCombo) {
         overlay_hold_timer += dt;
@@ -623,7 +251,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     // Keyboard Hotkey: F10
     static bool s_f10WasDown = false;
-    bool isF10Down = keyboard_sliders::IsDown(67);
+    bool isF10Down = keyboard::IsDown(67);
     if (isF10Down && !s_f10WasDown) {
         int curMode = InputOverlay::GetMode();
         InputOverlay::SetMode((curMode == InputOverlay::Mode_Keyboard) ? InputOverlay::Mode_Disabled : InputOverlay::Mode_Keyboard);
@@ -631,14 +259,17 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     s_f10WasDown = isF10Down;
 
     bool overlayVisible = InputOverlay::IsVisible();
-    bool anyUiOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer ||
-                     MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow ||
-                     PostProcessUi::g_showWindow || CustomizeSelUi::IsOpen() ||
-                     FpsOverlay::g_showWindow;
 
-    // Fast return if no UI or overlay is active
+    // Check if any plugin UI or overlay is active
+    bool anyUiOpen = ImGui::g_isMenuOpen || VirtualKeyboard::IsVisible() ||
+        MotionPlayerUi::g_showUltimatePlayer || MotionPlayerUi::g_showMotionControlWindow ||
+        WindControl::g_showWindow || MemoryScannerUi::g_showWindow || ResScalerUi::g_showWindow ||
+        PostProcessUi::g_showWindow || CustomizeSelUi::IsOpen() || FpsOverlay::g_showWindow ||
+        SongQuickJump::IsVisible() || DimOverlay::g_showWindow || VolumeOverlay::g_showWindow ||
+        PluginHelpUi::IsOpen() || Hints::IsVisible();
+
     if (!anyUiOpen && !overlayVisible) {
-        ImGui::mikuposptrcounter = -1;
+        MotionPlayerUi::ResetPtrCounter();
         return nullptr;
     }
 
@@ -648,10 +279,19 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     bool isLeftClick = false, isRightClick = false, isTouchActive = false;
 
+    // Mouse cursor activity timer
     static float s_mouseActivityTimer = 0.0f;
     if (s_mouseActivityTimer > 0.0f) {
         s_mouseActivityTimer -= dt;
         if (s_mouseActivityTimer < 0.0f) s_mouseActivityTimer = 0.0f;
+    }
+
+    // Hide mouse cursor when gamepad buttons are pressed
+    uint64_t padActionButtons = nn::hid::Button::A | nn::hid::Button::B | nn::hid::Button::X | nn::hid::Button::Y |
+                                nn::hid::Button::Up | nn::hid::Button::Down | nn::hid::Button::Left | nn::hid::Button::Right |
+                                nn::hid::Button::L | nn::hid::Button::R | nn::hid::Button::Minus | nn::hid::Button::Plus;
+    if (npad.buttons & padActionButtons) {
+        s_mouseActivityTimer = 0.0f;
     }
 
     bool isZLPressed = (npad.buttons & nn::hid::Button::ZL) != 0;
@@ -673,8 +313,8 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         }
     }
 
-    // Process inputs only when ImGui has focus
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
+        // 1. Touchscreen input
         if (nn::hid::GetTouchScreenState) {
             nn::hid::TouchScreenState ts = {};
             nn::hid::GetTouchScreenState(&ts);
@@ -682,11 +322,13 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
                 ImGui::g_cursorX = (float)ts.touches[0].x;
                 ImGui::g_cursorY = (float)ts.touches[0].y;
                 isTouchActive = true;
+                s_mouseActivityTimer = 0.0f;
                 if (ts.count >= 2) isRightClick = true;
                 else isLeftClick = true;
             }
         }
 
+        // 2. Physical mouse input
         if (nn::hid::GetMouseState && !isTouchActive) {
             nn::hid::MouseState ms = {};
             nn::hid::GetMouseState(&ms);
@@ -702,6 +344,7 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
+        // 3. Left analog stick mouse cursor emulation
         if (!isTouchActive) {
             float lx = (float)npad.analogStickL[0] / 32767.0f;
             float ly = -(float)npad.analogStickL[1] / 32767.0f;
@@ -722,17 +365,19 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         ImGui::g_cursorY = std::clamp(ImGui::g_cursorY, 0.0f, 720.0f);
     }
 
-    bool isFullWindowOpen = ImGui::g_isMenuOpen || ImGui::g_showUltimatePlayer;
-    bool isOverlayOpen = ResScalerUi::g_showWindow ||
-                         PostProcessUi::g_showWindow ||
-                         MemoryScannerUi::g_showWindow ||
-                         CustomizeSelUi::IsOpen();
+    bool isFullWindowOpen = ImGui::g_isMenuOpen || MotionPlayerUi::g_showUltimatePlayer ||
+                         MotionPlayerUi::g_showMotionControlWindow || WindControl::g_showWindow;
 
+    // =========================================================================
+    // MOUSE CURSOR DISPLAY
+    // =========================================================================
     bool shouldDrawCursor = false;
     if (ImGui::g_imguiHasFocus && !isTouchActive) {
         if (isFullWindowOpen) {
             shouldDrawCursor = true;
-        } else if (isOverlayOpen && (s_mouseActivityTimer > 0.0f)) {
+        }
+        // Show cursor if UI is active and mouse was moved
+        else if (s_mouseActivityTimer > 0.0f) {
             shouldDrawCursor = true;
         }
     }
@@ -754,189 +399,62 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
 
     // 1. Main Debug Window
     if (ImGui::g_isMenuOpen) {
-        ImGui::SetNextWindowBgAlpha(ImGui::g_imguiHasFocus ? 0.85f : 0.35f);
-        std::string title = "Debug Ui" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###MotionDebugWindow";
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        std::string title = "Debug UI" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###MotionDebugWindow";
 
         ImGui::Begin(title.c_str(), &ImGui::g_isMenuOpen, ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-        if (ImGui::CollapsingHeader("Smart Motion Recorder")) {
+        // Mot & Wind Control Collapsing Header
+        if (ImGui::CollapsingHeader("Mot & Wind Control ")) {
             ImGui::Separator();
-            if (ImGui::g_recordState == 0) {
-                if (ImGui::Button("Arm Recording (Wait for Motion)")) {
-                    ImGui::g_recordState = 1;
-                    ImGui::g_hasBaseSnapshot = false;
-                }
-                ImGui::SameLine(); ImGui::Text("Status: IDLE");
-            } else if (ImGui::g_recordState == 1) {
-                if (ImGui::Button("Cancel")) ImGui::g_recordState = 0;
-                ImGui::SameLine(); ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: ARMED (Play Anim!)");
-            } else if (ImGui::g_recordState == 2) {
-                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: RECORDING... (Frame %d)", ImGui::g_recordFrameCounter);
-                if (ImGui::Button("Stop & Save Now")) {
-                    ImGui::SaveDumpToSD();
-                    ImGui::g_recordState = 0;
-                    ImGui::RefreshFiles();
-                }
+            if (ImGui::Button("Motion Control", ImVec2(130.0f, 0.0f))) {
+                MotionPlayerUi::g_showMotionControlWindow = !MotionPlayerUi::g_showMotionControlWindow;
             }
-            ImGui::Spacing(); ImGui::Separator();
-            if (ImGui::Button("Refresh All Files")) ImGui::RefreshFiles();
             ImGui::SameLine();
-            if (ImGui::Button("Open Ultimate Motion Player")) ImGui::g_showUltimatePlayer = true;
-        }
-
-        if (ImGui::CollapsingHeader("Motion Control")) {
-            ImGui::Separator();
-            int displayBones = ImGui::g_maxBones;
-            ImGui::InputInt("Total Bones", &displayBones, 0, 0, ImGuiInputTextFlags_ReadOnly);
-            ImGui::InputInt("Current Bone", &ImGui::curmikupos);
-            ImGui::Checkbox("Override Params", &ImGui::mikuoverride);
-            ImGui::Checkbox("Show all params", &ImGui::mikushowall);
-
-            if (ImGui::mikuposptrcounter >= 0) {
-                ImGui::PushItemWidth(80);
-                ImGui::InputInt("a3", &ImGui::mikupos_a3[ImGui::curmikupos]); ImGui::SameLine();
-                ImGui::InputInt("a4", &ImGui::mikupos_a4[ImGui::curmikupos]); ImGui::SameLine();
-                ImGui::InputInt("a5", &ImGui::mikupos_a5[ImGui::curmikupos]);
-                ImGui::PopItemWidth();
-            }
-
-            if (ImGui::mikuposptrcounter >= 0 && ImGui::curmikupos < 9999) {
-                float* m1 = ImGui::mikupos_a1[ImGui::curmikupos];
-                float* m2 = ImGui::mikupos_a2[ImGui::curmikupos];
-                int start = ImGui::mikushowall ? 0 : 15;
-                for (int i = start; i <= 23; i++) {
-                    ImGui::PushItemWidth(100);
-                    if (m1) {
-                        char lbl1[32]; snprintf(lbl1, 32, "##a1_%d", i);
-                        ImGui::Text("%2d", i); ImGui::SameLine(); ImGui::DragFloat(lbl1, &m1[i], 0.01f);
-                    }
-                    if (m2) {
-                        ImGui::SameLine(180);
-                        char lbl2[32]; snprintf(lbl2, 32, "##a2_%d", i);
-                        ImGui::Text("-%d", i); ImGui::SameLine(); ImGui::DragFloat(lbl2, &m2[i], 0.01f);
-                    }
-                    ImGui::PopItemWidth();
-                }
-            }
-        }
-
-        StateSwitcher::Draw();
-
-        if (ImGui::CollapsingHeader("Extra Overlays")) {
-            ImGui::Separator();
-            const char* modeNames[] = { "Disabled", "Gamepad Overlay", "Keyboard Overlay" };
-            int curMode = std::clamp(InputOverlay::GetMode(), 0, 2);
-
-            ImGui::PushItemWidth(260);
-            if (ImGui::BeginCombo("Active Overlay", modeNames[curMode])) {
-                ImGui::GetWindowDrawList()->PushClipRectFullScreen();
-                for (int n = 0; n < 3; n++) {
-                    bool is_selected = (curMode == n);
-                    if (ImGui::Selectable(modeNames[n], is_selected)) {
-                        InputOverlay::SetMode(n);
-                    }
-                    if (is_selected) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::GetWindowDrawList()->PopClipRect();
-                ImGui::EndCombo();
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::Spacing(); ImGui::Separator();
-
-            const char* bssBtnLabel = MemoryScannerUi::g_showWindow ? "Close BSS Gaps Overlay" : "Open BSS Gaps Overlay";
-            if (ImGui::Button(bssBtnLabel, ImVec2(240, 28))) {
-                MemoryScannerUi::g_showWindow = !MemoryScannerUi::g_showWindow;
-                if (MemoryScannerUi::g_showWindow) {
-                    ImGui::g_imguiHasFocus = true;
-                }
+            if (ImGui::Button("Wind Control", ImVec2(130.0f, 0.0f))) {
+                WindControl::g_showWindow = !WindControl::g_showWindow;
             }
 
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.7f, 1.0f), "Input Overlays: Hold L3 + R3 (2 modes)");
-            ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.7f, 1.0f), "BSS Gaps Overlay: Hold L3 + R3 + ZL");
-            ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.7f, 1.0f), "Keyboard Overlay: Press F10");
+            MotionPlayerUi::DrawRecorderHeader();
         }
+
+        // State Switcher Sub-Menu
+        StateSwitcher::Draw();
+
+        // Save backup menu
+        SaveBackup::Draw();
+
+        // Extra menu
+        ExtraMenu::Draw();
 
         ImGui::GetWindowDrawList()->PopClipRect();
         ImGui::End();
     }
 
-    // 2. Ultimate Motion Player Window
-    if (ImGui::g_showUltimatePlayer) {
-        ImGui::SetNextWindowBgAlpha(ImGui::g_imguiHasFocus ? 0.90f : 0.40f);
-        if (ImGui::Begin("Ultimate Motion Player", &ImGui::g_showUltimatePlayer, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::GetWindowDrawList()->PushClipRectFullScreen();
+    // 2. Standalone Windows
+    MotionPlayerUi::DrawMotionControlWindow();
+    MotionPlayerUi::DrawUltimatePlayerWindow();
+    WindControl::DrawWindow();
 
-            ImGui::Checkbox("Enable Global Playback", &ImGui::g_ultimateEnable);
-            ImGui::SameLine(250.0f);
-            if (ImGui::Button("+ Add Motion Slot")) {
-                ImGui::g_slots.push_back(ImGui::DynamicSlot());
-            }
-            ImGui::Separator();
-
-            for (size_t i = 0; i < ImGui::g_slots.size(); i++) {
-                auto& slot = ImGui::g_slots[i];
-                ImGui::PushID((int)i);
-
-                ImGui::Checkbox("##en", &slot.enabled);
-                ImGui::SameLine();
-                ImGui::PushItemWidth(250);
-
-                if (ImGui::g_allFiles.empty()) {
-                    ImGui::BeginDisabled();
-                    if (ImGui::BeginCombo("##file", "No dumps found")) ImGui::EndCombo();
-                    ImGui::EndDisabled();
-                } else {
-                    const char* preview = slot.selectedIndex >= 0 ? ImGui::g_allFiles[slot.selectedIndex].fileName.c_str() : "Select File...";
-                    if (ImGui::BeginCombo("##file", preview)) {
-                        ImGui::GetWindowDrawList()->PushClipRectFullScreen();
-                        for (size_t n = 0; n < ImGui::g_allFiles.size(); n++) {
-                            bool is_selected = (slot.selectedIndex == (int)n);
-                            if (ImGui::Selectable(ImGui::g_allFiles[n].fileName.c_str(), is_selected)) {
-                                slot.selectedIndex = (int)n;
-                                ImGui::LoadDumpToSlot(slot);
-                            }
-                            if (is_selected) ImGui::SetItemDefaultFocus();
-                        }
-                        ImGui::GetWindowDrawList()->PopClipRect();
-                        ImGui::EndCombo();
-                    }
-                }
-                ImGui::PopItemWidth();
-
-                ImGui::SameLine();
-                ImGui::PushItemWidth(150);
-                float mx = slot.dump.hasData ? (float)slot.dump.maxFrame : 100.0f;
-                ImGui::SliderFloat("Frame##frm", &slot.currentFrame, 0.0f, mx, "%.1f");
-                ImGui::PopItemWidth();
-
-                ImGui::SameLine();
-                if (ImGui::Button(" X ")) {
-                    ImGui::g_slots.erase(ImGui::g_slots.begin() + i);
-                    ImGui::PopID();
-                    i--;
-                    continue;
-                }
-                ImGui::PopID();
-            }
-
-            ImGui::GetWindowDrawList()->PopClipRect();
-        }
-        ImGui::End();
-    }
-
-    // 3. Render Sub-Overlays
+    // 3. Render All Sub-Overlays
     InputOverlay::Draw();
     MemoryScannerUi::DrawWindow();
     ResScalerUi::DrawWindow();
     PostProcessUi::DrawWindow();
     FpsOverlay::DrawWindow();
     CustomizeSelUi::Draw();
+    PluginHelpUi::Draw();
+    SongQuickJump::Draw();
+    DimOverlay::Draw();
+    VolumeOverlay::Draw();
+    Hints::Draw();
+
+    VirtualKeyboard::Draw();
 
     ImGui::Render();
-    ImGui::mikuposptrcounter = -1;
+    MotionPlayerUi::ResetPtrCounter();
 
     ImDrawData* drawData = ImGui::GetDrawData();
     if (!drawData || drawData->CmdListsCount == 0 || drawData->TotalVtxCount == 0) {

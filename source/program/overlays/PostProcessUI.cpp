@@ -52,37 +52,42 @@ namespace PostProcessUi {
 
         // Compact UI styling
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(7.0f, 6.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 3.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f, 4.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 5.0f));
 
         if (ImGui::Begin("###PostProcessHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-            // Header line: Title on the left, single Reset button [R] on the right
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(ImVec4(0.28f, 0.88f, 0.83f, 1.0f), "Post Process Tuning");
-            ImGui::SameLine(ImGui::GetWindowWidth() - 32.0f);
 
-            // Single unified Reset [R] button
-            if (ImGui::Button("R", ImVec2(24, 19))) {
-                // 1. Release overrides in Config
+            ImGui::SameLine();
+
+            const float btnWidth = 20.0f;
+            float targetRightX = ImGui::GetWindowContentRegionMax().x - btnWidth;
+            if (targetRightX > ImGui::GetCursorPosX()) {
+                ImGui::SetCursorPosX(targetRightX);
+            }
+
+
+            if (ImGui::Button("R", ImVec2(btnWidth, 0.0f))) {
                 Config::toneMapMethod = -1;
                 Config::exposure      = -1.0f;
                 Config::gamma         = -1.0f;
                 Config::saturateCoef  = -1.0f;
                 Config::exposurePse   = -1.0f;
 
-                // 2. Immediately force vanilla defaults directly back into game memory!
                 if (rend) {
-                    if (set_tone_map_method) set_tone_map_method(rend, 0);    // 0 = YCC EXP
-                    if (set_exposure)        set_exposure(2.0f, rend);        // Triggers engine exposure pass
-                    if (set_gamma)           set_gamma(rend, 1.0f);           // Triggers engine gamma pass
-                    // Reset Saturation 2 to 1.0
+                    if (set_tone_map_method) set_tone_map_method(rend, 0);
+                    if (set_exposure)        set_exposure(2.0f, rend);
+                    if (set_gamma)           set_gamma(rend, 1.0f);
+
                     *reinterpret_cast<float*>(rend + 0x17f4) = 1.0f;
                     *reinterpret_cast<int32_t*>(rend + 0x1288) = 1;
                     *reinterpret_cast<int32_t*>(rend + 0x1a3c) = 1;
 
                     if (ctx) {
-                        *reinterpret_cast<float*>(ctx + 0xb70) = 1.0f; // Default PSE exposure scale
+                        *reinterpret_cast<float*>(ctx + 0xb70) = 1.0f;
                     }
                 }
             }

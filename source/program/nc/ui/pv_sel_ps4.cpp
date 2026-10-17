@@ -253,9 +253,9 @@ HOOK_DEFINE_TRAMPOLINE(PVselPS4DispHook) {
 
 void InstallPvSelPS4Hooks()
 {
-	PVselPS4CreateSortedPVListHook::InstallAtOffset(0x10dee0);
-	PVselPS4InitHook::InstallAtOffset(0x10c1e0);
-	PVselPS4CtrlHook::InstallAtOffset(0x10e9c0);
-	PVselPS4DestHook::InstallAtOffset(0x12c5d8);
-	PVselPS4DispHook::InstallAtOffset(0x118050);
+	// PVselPS4CreateSortedPVListHook::InstallAtOffset(0x10dee0);
+	// PVselPS4InitHook::InstallAtOffset(0x10c1e0);
+	// PVselPS4CtrlHook::InstallAtOffset(0x10e9c0);
+	// PVselPS4DestHook::InstallAtOffset(0x12c5d8);
+	// PVselPS4DispHook::InstallAtOffset(0x118050);
 }

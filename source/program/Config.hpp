@@ -6,6 +6,7 @@
 struct Config {
     static bool enableMods;
     static bool enableDebug;
+    static bool enableImGUI;
     static std::string modsDirectoryPath;
     static std::vector<std::string> priorityPaths;
 
@@ -24,12 +25,19 @@ struct Config {
     static bool skipAdv;
     static bool enableTouch;
     static bool enableKeyboard;
+    static int bgmBoost;
+    static int btnBoost;
+    static int seBoost;
+    static bool acapellaMode;
 
     // Graphics
     static bool disableAdp;
     static bool enableSss;
     static bool cstmMenuFtStyle;
     static bool extraFtGraphics;
+    static bool no3D;
+    static bool noMV;
+    static bool backMV;
     static std::string antiAliasing;
     static std::string magFilterMode;
     static std::string ssaaMode;
@@ -40,6 +48,7 @@ struct Config {
     static int toneMapMethod;
     static float saturateCoef;
     static float exposurePse;
+    static int dim;
 
     // FXAA Settings
     static float fxaaQualitySubpix;

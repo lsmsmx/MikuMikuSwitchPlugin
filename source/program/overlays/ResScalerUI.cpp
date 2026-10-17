@@ -19,8 +19,11 @@ namespace ResScalerUi {
         auto applyScaler = [lvar1](float val) {
             Config::resScaler = val;
             if (lvar1) {
-                *(float*)(lvar1 + 0x6570907c) = val; // Handheld offset
-                *(float*)(lvar1 + 0x65709088) = val; // Docked offset
+                *(float*)(lvar1 + 0x6570907c) = Config::resScaler; // handheld
+                *(float*)(lvar1 + 0x65709080) = Config::resScaler; // docked
+                *(float*)(lvar1 + 0x65709084) = Config::resScaler; // handheld
+                *(float*)(lvar1 + 0x65709088) = Config::resScaler; // docked
+                *(float*)(lvar1 + 0x6570908c) = Config::resScaler; // handheld
             }
         };
 

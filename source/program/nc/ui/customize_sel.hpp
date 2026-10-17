@@ -26,4 +26,7 @@ namespace CustomizeSelUi
 
     // ImGui drawing routine (called inside nvnImguiCalc)
     void Draw();
+
+    // Hint
+    bool IsInCustomizeScene();
 }

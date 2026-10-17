@@ -1,4 +1,5 @@
 #include "nvn_hooks.hpp"
+#include "Config.hpp"
 
 #include <array>
 #include <algorithm>
@@ -84,7 +85,7 @@ namespace nvn_hooks {
                 g_queue = queue;
             }
 
-            if (g_on_present != nullptr) {
+            if (Config::enableImGUI && g_on_present != nullptr) {
                 g_on_present(queue, window, texture_index);
             }
 

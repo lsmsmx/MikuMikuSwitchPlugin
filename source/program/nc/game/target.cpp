@@ -709,7 +709,7 @@ static void DrawBalloonEffectNote(uint32_t id, const diva_nc::vec2& pos, const d
 	args.scale.x = scale.x;
 	args.scale.y = scale.y;
 	args.scale.z = 1.0f;
-	args.resolution_mode_sprite = 13;
+	args.resolution_mode_screen = 13;
 	args.resolution_mode_sprite = 13;
 	args.index = 0;
 	args.layer = 0;

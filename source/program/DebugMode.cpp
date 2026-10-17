@@ -9,6 +9,8 @@
 #include <nn/os.hpp>
 #include "ImGui.hpp"
 #include "overlays/InputOverlay.hpp"
+#include "logger.hpp"
+
 
 // =========================================================
 // ADDRESSES & CONSTANTS (NSO = Ghidra - 0x100)
@@ -112,12 +114,12 @@ namespace DebugMode {
             if (!s_mouseEnabled) {
                 struct SceneEntry { int32_t state; int32_t sub; };
                 static const SceneEntry SCENES[] = {
-                    {0, 0}, {0, 1}, {9, 2}, {9, 3}, {9, 4}, {9, 5}, {9, 6}, {9, 7},
+                    {0, 0}, {0, 1}, {12, 2}, {12, 3}, {12, 4}, {12, 5}, {12, 6}, {12, 7},
                     {9, 8}, {3, 8}, {3, 9}, {3, 10}, {3, 11}, {3, 12}, {3, 13}, {3, 14}, {3, 15}, {3, 16},
                     {3, 17}, {3, 18}, {3, 19}, {3, 20}, {3, 21}, {3, 22}, {3, 23}, {3, 24},
-                    {3, 25}, {3, 26}, {3, 27}, {3, 28}, {4, 29}, {5, 30}, {3, 31}, {6, 32},
-                    {6, 33}, {6, 34}, {6, 35}, {6, 36}, {6, 37}, {6, 38}, {6, 39}, {6, 40},
-                    {6, 41}, {6, 42}, {6, 43}, {6, 44}, {6, 45}, {6, 46}
+                    {3, 25}, {3, 26}, {3, 27}, {3, 28}, {4, 29}, {5, 30}, {3, 31}, {12, 32},
+                    {12, 33}, {12, 34}, {12, 35}, {12, 312}, {12, 37}, {12, 38}, {12, 39}, {12, 40},
+                    {12, 41}, {12, 42}, {12, 43}, {12, 44}, {12, 45}, {12, 46}, {2, 47}
                 };
                 constexpr int SCENE_COUNT = sizeof(SCENES) / sizeof(SCENES[0]);
 
@@ -305,8 +307,8 @@ namespace DebugMode {
     void Init() {
         if (!Config::enableDebug) return;
 
-        DwScrollableGetBoundingBoxHook::InstallAtOffset(ADDR_BOUNDING_BOX);
         EngineUpdateTickHook::InstallAtOffset(ADDR_ENGINE_UPDATE_TICK);
+        DwScrollableGetBoundingBoxHook::InstallAtOffset(ADDR_BOUNDING_BOX);
 
         exl::patch::CodePatcher(FIX(0x002F8370)).Write<uint32_t>(0x7144011F);
         exl::patch::CodePatcher(FIX(0x0028DB18)).Write<uint32_t>(0x7144007F);

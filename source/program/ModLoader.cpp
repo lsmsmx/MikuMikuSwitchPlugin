@@ -17,6 +17,24 @@
 std::vector<std::string> ModLoader::modDirectoryPaths;
 static std::vector<std::string> s_modRomPaths;
 
+static bool DirectoryExists(const std::string& path) {
+    nn::fs::DirectoryHandle dh;
+    if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, path.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
+        nn::fs::CloseDirectory(dh);
+        return true;
+    }
+    return false;
+}
+
+static std::string ToVirtualRomPath(const std::string& physicalPath) {
+    std::string virtualPath = physicalPath;
+    size_t romfsPos = virtualPath.find("/romfs/");
+    if (romfsPos != std::string::npos) {
+        virtualPath = "rom:/" + virtualPath.substr(romfsPos + 7);
+    }
+    return virtualPath;
+}
+
 void ModLoader::initMod(const std::string& path) {
     std::string configPath = path + "/config.toml";
     nn::fs::FileHandle h;
@@ -75,29 +93,40 @@ void ModLoader::init() {
     // 1. Process mods based on the synchronized priority list
     for (const auto& modName : Config::priorityPaths) {
         std::string modDirectory = Config::modsDirectoryPath + "/" + modName;
-        nn::fs::DirectoryHandle dh;
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, modDirectory.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
-            nn::fs::CloseDirectory(dh);
+        if (DirectoryExists(modDirectory)) {
             initMod(modDirectory);
         }
     }
 
-    // 2. Convert physical SD paths to virtual RomFS paths for optimized loading
+    // 2. Resolve Steam or Vanilla mod root paths to virtual RomFS paths
     for (auto& modDir : modDirectoryPaths) {
-        std::string checkPath = modDir + "/rom";
+        bool hasSteamJp = DirectoryExists(modDir + "/rom_steam/rom");
+        bool hasSteamEn = DirectoryExists(modDir + "/rom_steam_en/rom");
 
-        nn::fs::DirectoryHandle dh;
-        if (R_SUCCEEDED(nn::fs::OpenDirectory(&dh, checkPath.c_str(), nn::fs::OpenDirectoryMode_Directory))) {
-            nn::fs::CloseDirectory(dh);
+        std::string targetModPath = "";
 
-            // Convert "ExlSD:/atmosphere/.../romfs/mods/ModName" to "rom:/mods/ModName"
-            // This triggers Atmosphere's LayeredFS RAM caching for maximum speed.
-            std::string virtualPath = modDir;
-            size_t romfsPos = virtualPath.find("/romfs/");
-            if (romfsPos != std::string::npos) {
-                virtualPath = "rom:/" + virtualPath.substr(romfsPos + 7);
+        if (Config::forceJapanese) {
+            // Japanese region mode: pick rom_steam, or fallback to rom_steam_en if missing
+            if (hasSteamJp) {
+                targetModPath = modDir + "/rom_steam";
+            } else if (hasSteamEn) {
+                targetModPath = modDir + "/rom_steam_en";
             }
-            s_modRomPaths.push_back(virtualPath);
+        } else {
+            // Default/English mode: pick rom_steam_en, or fallback to rom_steam if missing
+            if (hasSteamEn) {
+                targetModPath = modDir + "/rom_steam_en";
+            } else if (hasSteamJp) {
+                targetModPath = modDir + "/rom_steam";
+            }
+        }
+
+        // If a Steam directory was selected, mount it directly as the mod root
+        if (!targetModPath.empty()) {
+            s_modRomPaths.push_back(ToVirtualRomPath(targetModPath));
+        } else if (DirectoryExists(modDir + "/rom")) {
+            // Fallback for standard Switch mod structure (modfolder/rom)
+            s_modRomPaths.push_back(ToVirtualRomPath(modDir));
         }
     }
 

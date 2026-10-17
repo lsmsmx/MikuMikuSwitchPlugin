@@ -23,6 +23,8 @@
 #include "ui/customize_sel.hpp"
 #include "ui/result.hpp"
 
+#include "../ChartRandomizer.hpp"
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 extern void ResetJitLinks(); // Forward declaration from target.cpp
@@ -186,6 +188,9 @@ void SyncAndLinkLongNotes()
 		}
 	}
 }
+
+#include "ChartRandomizer.hpp"
+#include "game/dsc.hpp"
 
 // 4. PVGameReset
 HOOK_DEFINE_TRAMPOLINE(PVGameResetHook) {

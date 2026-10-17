@@ -11,6 +11,12 @@
 #include "sound_effects.hpp"
 #include "../diva_nc.hpp"
 
+#include "../../AutoPlay.hpp"
+
+#include "lib.hpp"
+#include <cstdint>
+#include <cstring>
+
 struct NCSharedGameState
 {
 	std::vector<PvGameTarget*> active_group;
@@ -161,10 +167,19 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 
 		game_state.Reset();
 		static int32_t last_update_frame = -1;
+
+		// 1. AutoPlay injects button taps into GetPvKeyState hooks
+		AutoPlay::Update(game);
+
+		// 2. Engine updates macro_state from hooks
 		macro_state.Update(game->ptr08, 0);
+
+		// 3. AutoPlay injects stick flicks (stars) and holds AFTER macro_state wiped them
+		AutoPlay::PostUpdate(game);
 
 		if (ShouldUpdateTargets())
 		{
+
 			int32_t disp_score = 0;
 			int32_t disp_count = 0;
 			diva_nc::vec2 disp_pos = { };
@@ -234,6 +249,7 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 				GetPVGameData()->ui.SetBonusText(disp_score, disp_pos / disp_count);
 		}
 
+		// ORIG
 		final_hit_state = Orig(
 			game,
 			play_default_se,
@@ -251,6 +267,25 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 			slide_chain_max,
 			slide_chain_continues,
 			a16
+		);
+
+		// Autoplay slide evaluation & duplicate echo suppressor
+		AutoPlay::ProcessSlideHit(
+			game,
+			final_hit_state,
+			play_default_se,
+			rating_count,
+			rating_pos,
+			se,
+			multi_count,
+			player_hit_time,
+			target_index,
+			is_success_note,
+			slide,
+			slide_chain,
+			slide_chain_start,
+			slide_chain_max,
+			slide_chain_continues
 		);
 
 		if (!ShouldUpdateTargets())

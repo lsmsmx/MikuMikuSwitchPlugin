@@ -27,13 +27,12 @@ namespace MemoryScannerUi {
         uint64_t size;
         uint32_t type;
         uint32_t attr;
-        uint32_t perm; // Bit 0: Read permission
+        uint32_t perm;
         uint32_t ipc_ref;
         uint32_t device_ref;
         uint32_t pad;
     };
 
-    // Fast kernel memory query with full clobber protection
     __attribute__((noinline))
     static bool QueryMemorySafe(uintptr_t addr, SvcMemoryInfo* outInfo) {
         uint32_t pageInfo = 0;
@@ -58,9 +57,8 @@ namespace MemoryScannerUi {
         uintptr_t scanStart = base;
         uintptr_t scanEnd   = base + 0xBEA00000;
 
-        // 256KB chunks: 4x fewer iterations, identical accuracy for 32MB+ gaps
         const size_t CHUNK_SIZE = 256 * 1024;
-        constexpr size_t WORDS_PER_CHUNK = CHUNK_SIZE / sizeof(uint64_t); // 32768 words
+        constexpr size_t WORDS_PER_CHUNK = CHUNK_SIZE / sizeof(uint64_t);
 
         uintptr_t curStart = 0;
         size_t curLen = 0;
@@ -73,7 +71,6 @@ namespace MemoryScannerUi {
                 continue;
             }
 
-            // Skip unmapped holes
             if ((mem.perm & 1) == 0) {
                 if (curLen >= SUM_FILTER_BYTES) {
                     s_totalFreeBssMB += (float)curLen / (1024.0f * 1024.0f);
@@ -95,11 +92,9 @@ namespace MemoryScannerUi {
                 const uint64_t* p = reinterpret_cast<const uint64_t*>(addr);
                 bool isZero = true;
 
-                // 1. Ultra-fast probe: check 8 widely spaced points across 256KB in 1 CPU cycle
                 if ((p[0] | p[4096] | p[8192] | p[12288] | p[16384] | p[20480] | p[24576] | p[WORDS_PER_CHUNK - 1]) != 0ULL) {
                     isZero = false;
                 } else {
-                    // 2. Unrolled 64-byte batch read (processes 8 words per loop with 0 branch stalls)
                     for (size_t i = 0; i < WORDS_PER_CHUNK; i += 8) {
                         uint64_t batch = p[i] | p[i+1] | p[i+2] | p[i+3] | p[i+4] | p[i+5] | p[i+6] | p[i+7];
                         if (batch != 0ULL) {
@@ -157,7 +152,6 @@ namespace MemoryScannerUi {
         }
         s_lastL3State = l3Down;
 
-        // Anchor window to top-right corner; it grows downwards automatically
         ImVec2 screenSize = ImGui::GetIO().DisplaySize;
         ImGui::SetNextWindowPos(ImVec2(screenSize.x - 12.0f, 12.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
         ImGui::SetNextWindowBgAlpha(0.85f);
@@ -171,9 +165,10 @@ namespace MemoryScannerUi {
         if (ImGui::Begin("###BSSGapsHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-            // Miku Teal (#47DFD3) Title
+            // Perfect vertical baseline alignment
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(ImVec4(0.28f, 0.88f, 0.83f, 1.0f), "BSS RAM (32MB+ Gaps)");
-            ImGui::SameLine(160.0f);
+            ImGui::SameLine(165.0f);
 
             bool isFlashing = (s_clickFlashTimer > 0.0f);
             if (isFlashing) {
@@ -181,7 +176,7 @@ namespace MemoryScannerUi {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.45f, 0.43f, 0.95f));
             }
 
-            if (ImGui::Button("Update", ImVec2(80, 22))) {
+            if (ImGui::Button("Update L3", ImVec2(75, 0))) {
                 ScanGaps();
                 s_clickFlashTimer = 0.20f;
             }
@@ -194,7 +189,6 @@ namespace MemoryScannerUi {
             ImGui::Separator();
             ImGui::Spacing();
 
-            // No scroll area: window dynamically adjusts its height to fit all gaps
             if (s_gaps.empty()) {
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Press L3 or click to scan.");
             } else {
