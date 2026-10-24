@@ -114,7 +114,7 @@ bool ButtonState::IsTappedInNearFrames() const
 	if (count == 0) return false;
 	for (size_t i = 0; i < count; i++)
 	{
-		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - data[i].time).count() > 50)
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(data[0].time - data[i].time).count() > 60)
 			return false;
 
 		if (data[i].tapped)

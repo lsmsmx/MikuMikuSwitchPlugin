@@ -15,7 +15,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Rewritten memory allocators to prevent from crashing
 - 95% New Classics Port (USE ORIGINAL ASSETS FROM PC VERSION)
 - DEBUG AND FREECAM
-- MLAA, leaf effect restoration (Sega bugs)
+- MLAA, TAA, leaf effect restoration (Sega bugs)
 - Spr_set_back Sega bug fix (rescaling bg image in pv)
 - Full 2D and NoMovie modes
 - Attract theater mode restoration (restores absent buttons) missing files https://gamebanana.com/mods/728835
@@ -54,8 +54,6 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Ext Savedata backup
 - Wind Control
 - Hints
-
-_NOTE_: for best looking graphics use dock/fakedock mode using ReverseNX https://github.com/masagrator/ReverseNX-RT + `-no_npr` in args.txt
 
 # Instructions
 - External save file (for NC too) is located in sdmc:/MikuMikuSwitchPlugin/Save/

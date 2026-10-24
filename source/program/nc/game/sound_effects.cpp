@@ -48,17 +48,12 @@ void SoundEffectManager::PlayButtonSE() { sound::PlaySoundEffect(QueueIndex, but
 void SoundEffectManager::PlayDoubleSE() { sound::PlaySoundEffect(QueueIndex, w_button.c_str(), 1.0f); }
 void SoundEffectManager::PlayCymbalSE() { sound::PlaySoundEffect(QueueIndex, "cymbal_mmv", 1.0f); }
 void SoundEffectManager::PlayStarDoubleSE() { sound::PlaySoundEffect(QueueIndex, w_star.c_str(), 1.0f); }
-
-void SoundEffectManager::PlayStarSE()
-{
-	sound::PlaySoundEffect(QueueIndex, star.c_str(), 1.0f);
-}
+void SoundEffectManager::PlayStarSE() { sound::PlaySoundEffect(QueueIndex, star.c_str(), 1.0f); }
 
 void SoundEffectManager::StartLongSE()
 {
 	auto now = std::chrono::steady_clock::now();
 
-	// Clean up hanging hold sound from previous pause/restart before starting a new one
 	if (long_se_active)
 	{
 		if (now - long_se_start < std::chrono::milliseconds(50))
@@ -67,10 +62,7 @@ void SoundEffectManager::StartLongSE()
 		EndLongSE(true);
 	}
 
-	// 1. Attack click (Queue 3)
 	sound::PlaySoundEffect(QueueIndex, l_button_on.c_str(), 1.0f);
-
-	// 2. Loop cue (SustainQueueIndex = Queue 4)
 	sound::PlaySoundEffect(SustainQueueIndex, l_button_on.c_str(), 1.0f);
 
 	long_se_active = true;
@@ -88,93 +80,62 @@ void SoundEffectManager::EndLongSE(bool fail)
 }
 
 static constexpr int64_t TICKS_PER_MS = 19200LL;
-static constexpr int64_t RUSH_INTRO_TICKS = 2567LL * TICKS_PER_MS; // 49,286,400 ticks (2.567s)
+static constexpr int64_t RUSH_INTRO_TICKS = 2567LL * TICKS_PER_MS;
 
 static bool    s_rush_active  = false;
 static bool    s_rush_looping = false;
 static int64_t s_rush_start_tick = 0;
-static int64_t s_last_log_ms = 0;
 
-static int     s_link_count   = 0;
+static bool    s_link_active  = false;
 static bool    s_link_looping = false;
 static int64_t s_link_start_tick = 0;
 static int64_t s_link_intro_ticks = 0;
 static std::string s_link_sound_name;
 
-// Calculate intro duration from sample properties in property_nc.txt:
 static inline int64_t GetLinkIntroTicks(const std::string& name) {
-    if (name.find("scratch_l1") != std::string::npos) return 0; // loop_start = 0
-    if (name.find("scratch_l2") != std::string::npos) return 0; // loop_start = 0
-    if (name.find("scratch_l3") != std::string::npos) return 146580LL * 19200LL / 48000LL; // 3054 ms
-    if (name.find("scratch_l4") != std::string::npos) return 36008LL  * 19200LL / 48000LL; // 750 ms
-    if (name.find("scratch_l5") != std::string::npos) return 35308LL  * 19200LL / 48000LL; // 735 ms
+    if (name.find("scratch_l1") != std::string::npos) return 0;
+    if (name.find("scratch_l2") != std::string::npos) return 0;
+    if (name.find("scratch_l3") != std::string::npos) return 146580LL * 19200LL / 48000LL;
+    if (name.find("scratch_l4") != std::string::npos) return 36008LL  * 19200LL / 48000LL;
+    if (name.find("scratch_l5") != std::string::npos) return 35308LL  * 19200LL / 48000LL;
     return 0;
-}
-
-void SoundEffectManager::StartRushBackSE()
-{
-    if (s_rush_active) return;
-
-    s_rush_active  = true;
-    s_rush_looping = false;
-    s_rush_start_tick = nn::os::GetSystemTick().GetInt64Value();
-    s_last_log_ms = 0;
-
-    sound::PlaySoundEffect(QueueIndex, rush_on.c_str(), 1.0f);
-}
-
-void SoundEffectManager::EndRushBackSE(bool popped)
-{
-    s_rush_active  = false;
-    s_rush_looping = false;
-
-    SustainAudio::StopSlot(6);
-    sound::ReleaseCue(QueueIndex, rush_on.c_str(), popped);
-    sound::ReleaseCue(SoundEffectManager::SustainQueueIndex, rush_on.c_str(), true);
-
-    if (popped)
-        sound::PlaySoundEffect(QueueIndex, rush_off.c_str(), 1.0f);
 }
 
 void SoundEffectManager::StartLinkSE()
 {
-    s_link_count++;
+    if (s_link_active) return;
 
-    // If already playing from the first star, subsequent stars maintain playback
-    if (s_link_count > 1) return;
-
+    s_link_active      = true;
     s_link_sound_name  = link;
     s_link_intro_ticks = GetLinkIntroTicks(link);
     s_link_looping     = false;
     s_link_start_tick  = nn::os::GetSystemTick().GetInt64Value();
 
-    // 1. Attack / intro playback in Queue 3
-    sound::PlaySoundEffect(QueueIndex, link.c_str(), 1.0f);
-
-    // 2. If scratch loop_start == 0 (scratch_l1 and l2), start sustain loop immediately
     if (s_link_intro_ticks == 0) {
         s_link_looping = true;
         sound::PlaySoundEffect(SustainQueueIndex, link.c_str(), 1.0f);
+    } else {
+        sound::PlaySoundEffect(QueueIndex, link.c_str(), 1.0f);
     }
 }
 
 void SoundEffectManager::EndLinkSE()
 {
-    if (s_link_count > 0) {
-        s_link_count--;
+    if (!s_link_active) return;
+
+    s_link_active  = false;
+    s_link_looping = false;
+
+    for (int s = 7; s <= 11; s++) {
+        SustainAudio::StopSlot(s);
     }
 
-    // Stop sound only after all active stars are released (counter drops to 0)
-    if (s_link_count == 0) {
-        s_link_looping = false;
+    sound::ReleaseCue(QueueIndex, link.c_str(), true);
+    sound::ReleaseCue(SustainQueueIndex, link.c_str(), true);
 
-        // Stop scratch slots 7..11
-        for (int i = 7; i <= 11; i++) {
-            SustainAudio::StopSlot(i);
-        }
-
-        sound::ReleaseCue(QueueIndex, link.c_str(), false);
-        sound::ReleaseCue(SustainQueueIndex, link.c_str(), true);
+    if (!s_link_sound_name.empty() && s_link_sound_name != link) {
+        sound::ReleaseCue(QueueIndex, s_link_sound_name.c_str(), true);
+        sound::ReleaseCue(SustainQueueIndex, s_link_sound_name.c_str(), true);
     }
 }
 
@@ -182,12 +143,12 @@ namespace sound_effects {
     void ResetState() {
         s_rush_active  = false;
         s_rush_looping = false;
-        s_link_count   = 0;
+        s_link_active  = false;
         s_link_looping = false;
+        SustainAudio::StopAll();
     }
 
     void UpdateSELoop() {
-        // Rush:
         if (s_rush_active && !s_rush_looping) {
             int64_t diff = nn::os::GetSystemTick().GetInt64Value() - s_rush_start_tick;
             if (diff >= RUSH_INTRO_TICKS) {
@@ -196,11 +157,11 @@ namespace sound_effects {
             }
         }
 
-        // Long scratches (l3, l4, l5):
-        if (s_link_count > 0 && !s_link_looping) {
+        if (s_link_active && !s_link_looping) {
             int64_t diff = nn::os::GetSystemTick().GetInt64Value() - s_link_start_tick;
             if (diff >= s_link_intro_ticks) {
                 s_link_looping = true;
+                sound::ReleaseCue(SoundEffectManager::QueueIndex, s_link_sound_name.c_str(), true);
                 sound::PlaySoundEffect(SoundEffectManager::SustainQueueIndex, s_link_sound_name.c_str(), 1.0f);
             }
         }

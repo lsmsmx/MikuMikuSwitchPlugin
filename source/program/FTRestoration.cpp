@@ -39,6 +39,12 @@
 
 #define ADDR_GET_MAG_FILTER 0x004A0D20
 
+// TAA (PS4 Future Tone restore) - raw vaddr (verified in main.elf)
+#define ADDR_TAA_FRAME_DISABLE    0x00481B40 // bl 0x4A0540 -> NOP
+#define ADDR_TAA_QUALITY_FLAG     0x0020C3D0 // quality getter -> mov w0,#1; ret
+#define ADDR_TAA_ENABLE_STR       0x004A044C // str w1,[x0,#0xc] -> str w8
+#define ADDR_TAA_RESOLVE_W26      0x004ABAC0 // mov w26,wzr -> mov w26,#1
+
 constexpr uint32_t ARM64_NOP   = 0xD503201F;
 constexpr uint32_t ARM64_RET   = 0xD65F03C0;
 constexpr uint32_t ARM64_W0_1  = 0x52800020;
@@ -257,9 +263,12 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
 
         uint32_t* adp_low  = (uint32_t*)(lvar1 + 0x65708f90);
         uint32_t* adp_high = (uint32_t*)(lvar1 + 0x65708f90 + 4);
+        uintptr_t config = *(uintptr_t*)(base + 0x00cdf838);
 
         if (Config::disableAdp) {
             *adp_low = 0; // Disable ADP completely
+
+            *(uint8_t*)(config + 0x7f) = 1; // 1 = -no_npr
 
             // Apply fixed scaler only when ADP is disabled
             if (Config::resScaler != 1.0f) {
@@ -291,8 +300,7 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
 
 
         if (Config::force30fps) {
-            *adp_high |= 0x800;
-            *adp_high |= 0x1000;
+            *adp_high |= 0x5001800;
         }
 
         return result;
@@ -591,7 +599,6 @@ HOOK_DEFINE_TRAMPOLINE(CustomizeSetLightingInfoHook) {
     }
 };
 
-
 void FTRestoration::init() {
     RandomInitHook::InstallAtOffset(0x1f4150);
 
@@ -617,10 +624,6 @@ void FTRestoration::init() {
         exl::patch::CodePatcher(ADDR_GET_BLUR_QUALITY_FLAG + 4).Write<uint32_t>(ARM64_RET);
         exl::patch::CodePatcher(ADDR_BLUR_BUFFER_2_ARG_FIX).Write<uint32_t>(ARM64_W1_0);
 
-        exl::patch::CodePatcher(0x20b020).Write<uint32_t>(ARM64_RET);
-        exl::patch::CodePatcher(0x20b040).Write<uint32_t>(ARM64_RET);
-        exl::patch::CodePatcher(0x20b060).Write<uint32_t>(ARM64_RET);
-
         PatchSettersWithRet();
     }
 
@@ -644,6 +647,43 @@ void FTRestoration::init() {
 
     exl::patch::CodePatcher(0x20c5b0).Write<uint32_t>(ARM64_RET);
     exl::patch::CodePatcher(0x20c600).Write<uint32_t>(ARM64_RET);
+
+    // 2a. Temporal Anti-Aliasing (TAA)
+    if (Config::enableTaa) {
+        // 1. remove per-frame enable clear (init keeps it at 1)
+        exl::patch::CodePatcher(ADDR_TAA_FRAME_DISABLE).Write<uint32_t>(ARM64_NOP);
+
+        // 2. force quality getter to return enabled
+        exl::patch::CodePatcher(ADDR_TAA_QUALITY_FLAG).Write<uint32_t>(ARM64_W0_1);
+        exl::patch::CodePatcher(ADDR_TAA_QUALITY_FLAG + 4).Write<uint32_t>(ARM64_RET);
+
+        // 3. keep enable written (w8=1 from preceding mov)
+        exl::patch::CodePatcher(ADDR_TAA_ENABLE_STR).Write<uint32_t>(0xB9000C08);
+
+        // 4. keep temporal enable w26 at 1 in resolve
+        exl::patch::CodePatcher(ADDR_TAA_RESOLVE_W26).Write<uint32_t>(0x5280003A);
+
+        // 5. prevent Switch docked profile from bypassing TAA on static camera
+        exl::patch::CodePatcher(0x004ac018).Write<uint32_t>(ARM64_NOP);
+
+        // 6. Match PC: do not skip camera distance calculation
+        exl::patch::CodePatcher(0x004abff8).Write<uint32_t>(0x52800037); // mov w23, #1
+        exl::patch::CodePatcher(0x004abffc).Write<uint32_t>(ARM64_NOP);    // NOP cbz w23
+
+        // 7. FIX FLICKER / STROBE: Always select the OPPOSITE frame as history (history = 2 - current_phase)
+        // Replaces broken csel logic that caused frame 0 to blend with itself!
+        exl::patch::CodePatcher(0x004ac0bc).Write<uint32_t>(0x52800049); // mov w9, #2
+        exl::patch::CodePatcher(0x004ac0c0).Write<uint32_t>(0x4B080128); // sub w8, w9, w8
+
+        // 8. Match PC: do not skip phase toggle
+        exl::patch::CodePatcher(0x004ac3fc).Write<uint32_t>(ARM64_NOP);    // NOP cbz w23
+
+        // 9. Match PC: force engine's native "b.ne LAB_004ac01c" to always trigger, different weights
+        exl::patch::CodePatcher(0x004ac87c).Write<uint32_t>(0x710007FF);
+        exl::patch::CodePatcher(0x004ac8a4).Write<uint32_t>(0x710007FF);
+        exl::patch::CodePatcher(0x004ac8cc).Write<uint32_t>(0x710007FF);
+        exl::patch::CodePatcher(0x004ac904).Write<uint32_t>(0x710007FF);
+    }
 
     // 3. Subsurface Scattering (SSS)
     if (Config::enableSss) {

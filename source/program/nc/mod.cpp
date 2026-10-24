@@ -189,9 +189,6 @@ void SyncAndLinkLongNotes()
 	}
 }
 
-#include "ChartRandomizer.hpp"
-#include "game/dsc.hpp"
-
 // 4. PVGameReset
 HOOK_DEFINE_TRAMPOLINE(PVGameResetHook) {
 	static void Callback(PVGameData* pv_game) {

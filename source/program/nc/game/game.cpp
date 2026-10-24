@@ -1,5 +1,8 @@
 #include <stdint.h>
 #include <cstring>
+#include <vector>
+#include <utility>
+
 #include "lib.hpp"
 #include "../nc_state.hpp"
 #include "logger.hpp"
@@ -10,12 +13,18 @@
 #include "score.hpp"
 #include "sound_effects.hpp"
 #include "../diva_nc.hpp"
-
 #include "../../AutoPlay.hpp"
 
-#include "lib.hpp"
-#include <cstdint>
-#include <cstring>
+// Shared frame tracking across modules
+int32_t s_current_hit_frame = 0;
+int32_t s_last_hit_frame = -1;
+int64_t s_last_hit_time = -1;
+int32_t s_last_single_frame = -1000;
+int32_t s_face_tap_frame[4] = { -1000, -1000, -1000, -1000 };
+int32_t s_arrow_tap_frame[4] = { -1000, -1000, -1000, -1000 };
+bool s_face_consumed_by_single[4] = { false, false, false, false };
+bool s_arrow_consumed_by_single[4] = { false, false, false, false };
+PVGameArcade* g_current_game = nullptr;
 
 struct NCSharedGameState
 {
@@ -64,14 +73,12 @@ static bool CheckContinuousNoteSoundEffects(PvGameTarget* target, TargetStateEx*
 // 0x430A0000 = 138.0f (default), 0x43150000 = 149.0f (Chance Time)
 uint32_t g_target_height_bits = 0x430A0000;
 
-// 1. Hook write to internal register W8 (0x1b98e0)
 HOOK_DEFINE_INLINE(FrameHeightHook_W8) {
 	static void Callback(exl::hook::nx64::InlineCtx* ctx) {
 		ctx->W[8] = g_target_height_bits;
 	}
 };
 
-// 2. Hook write to internal register X9 (0x1b98d8)
 HOOK_DEFINE_INLINE(FrameHeightHook_X9) {
 	static void Callback(exl::hook::nx64::InlineCtx* ctx) {
 		uint64_t imm16 = (g_target_height_bits >> 16) & 0xFFFF;
@@ -82,12 +89,44 @@ HOOK_DEFINE_INLINE(FrameHeightHook_X9) {
 // 1. GetHitStateInternal (0x1b11f0)
 HOOK_DEFINE_TRAMPOLINE(GetHitStateInternalHook) {
 	static int32_t Callback(PVGameArcade* game, PvGameTarget* target, uint16_t a3, uint16_t a4) {
-		game_state.PushActiveTarget(target);
-
-		int32_t t_type = target ? target->target_type : -1;
-		if (target->target_type < TargetType_Custom || target->target_type >= TargetType_Max)
+		if (!target)
 			return Orig(game, target, a3, a4);
 
+		game_state.PushActiveTarget(target);
+
+		// Prevent sequential notes with different hit times from being judged in the exact same frame
+		if (s_last_hit_frame >= 0 && s_current_hit_frame <= s_last_hit_frame + 2 && target->hit_time != s_last_hit_time) {
+			return HitState_None;
+		}
+
+		int32_t t_type = target->target_type;
+
+		// Vanilla note processing
+		if (t_type < TargetType_Custom || t_type >= TargetType_Max) {
+			int32_t res = Orig(game, target, a3, a4);
+			if (res != HitState_None && nc::IsHitCorrect(res)) {
+				s_last_hit_frame = s_current_hit_frame;
+				s_last_hit_time = target->hit_time;
+
+				if (t_type >= TargetType_Triangle && t_type <= TargetType_Square) {
+					s_last_single_frame = s_current_hit_frame;
+					int32_t offset = t_type - TargetType_Triangle;
+					ButtonState& face = macro_state.buttons[Button_Triangle + offset];
+					ButtonState& arrow = macro_state.buttons[Button_Up + offset];
+
+					// Mark any button down during this single note hit as consumed
+					if (face.IsTapped() || face.IsTappedInNearFrames() || face.IsDown()) {
+						s_face_consumed_by_single[offset] = true;
+					}
+					if (arrow.IsTapped() || arrow.IsTappedInNearFrames() || arrow.IsDown()) {
+						s_arrow_consumed_by_single[offset] = true;
+					}
+				}
+			}
+			return res;
+		}
+
+		// Custom note processing (Double notes, Rush, Link, etc.)
 		TargetStateEx* ex = GetTargetStateEx(target);
 		if (!ex)
 			return HitState_Worst;
@@ -95,6 +134,11 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateInternalHook) {
 
 		bool success = false;
 		int32_t hit_state = nc::JudgeNoteHit(game, &target, &ex, 1, &success);
+
+		if (hit_state != HitState_None && nc::IsHitCorrect(hit_state)) {
+			s_last_hit_frame = s_current_hit_frame;
+			s_last_hit_time = target->hit_time;
+		}
 
 		if (success)
 			GetPVGameData()->is_success_branch = true;
@@ -165,8 +209,10 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 	) {
 		int32_t final_hit_state = HitState_None;
 
+		g_current_game = game;
+
 		game_state.Reset();
-		static int32_t last_update_frame = -1;
+		s_current_hit_frame++;
 
 		// 1. AutoPlay injects button taps into GetPvKeyState hooks
 		AutoPlay::Update(game);
@@ -177,9 +223,35 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 		// 3. AutoPlay injects stick flicks (stars) and holds AFTER macro_state wiped them
 		AutoPlay::PostUpdate(game);
 
+		// If a second finger touched down within 2 frames after a single note hit, consume it too
+		if (s_last_single_frame >= 0 && s_current_hit_frame <= s_last_single_frame + 2) {
+			for (int i = 0; i < 4; i++) {
+				if (macro_state.buttons[Button_Triangle + i].IsTapped())
+					s_face_consumed_by_single[i] = true;
+				if (macro_state.buttons[Button_Up + i].IsTapped())
+					s_arrow_consumed_by_single[i] = true;
+			}
+		}
+
+		// Record tap frames and reset single-consumed locks
+		for (int i = 0; i < 4; i++) {
+			ButtonState& face = macro_state.buttons[Button_Triangle + i];
+			ButtonState& arrow = macro_state.buttons[Button_Up + i];
+
+			if (face.IsTapped())
+				s_face_tap_frame[i] = s_current_hit_frame;
+			if (arrow.IsTapped())
+				s_arrow_tap_frame[i] = s_current_hit_frame;
+
+			// Reset consumed on release, or when a deliberate tap happens strictly after the single note window (+2)
+			if (face.IsReleased() || (face.IsTapped() && s_current_hit_frame > s_last_single_frame + 2))
+				s_face_consumed_by_single[i] = false;
+			if (arrow.IsReleased() || (arrow.IsTapped() && s_current_hit_frame > s_last_single_frame + 2))
+				s_arrow_consumed_by_single[i] = false;
+		}
+
 		if (ShouldUpdateTargets())
 		{
-
 			int32_t disp_score = 0;
 			int32_t disp_count = 0;
 			diva_nc::vec2 disp_pos = { };
@@ -194,12 +266,11 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 			{
 				TargetStateEx* tgt = *it;
 
-				// NOTE: Poll input for ongoing long notes
+				// Poll input for ongoing long notes
 				if (tgt->IsLongNoteStart() && tgt->holding)
 				{
 					bool is_in_zone = false;
 
-					// NOTE: Check if the end target is in it's timing window
 					if (tgt->next && tgt->next->org != nullptr)
 					{
 						float time = tgt->next->org->flying_time_remaining;
@@ -209,9 +280,6 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 					score::CalculateSustainBonus(tgt);
 					addTargetScoreDisp(tgt);
 
-					// NOTE: Check if the start target button has been released;
-					//       if the end note is not inside its timing zone,
-					//       automatically mark it as a fail.
 					if (!nc::CheckLongNoteHolding(tgt) && !is_in_zone)
 					{
 						if (tgt->next)
@@ -224,7 +292,7 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 						continue;
 					}
 				}
-				// NOTE: Poll input for ongoing rush notes
+				// Poll input for ongoing rush notes
 				else if (tgt->IsRushNote() && tgt->holding)
 				{
 					if (nc::CheckRushNotePops(tgt))
@@ -249,7 +317,6 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 				GetPVGameData()->ui.SetBonusText(disp_score, disp_pos / disp_count);
 		}
 
-		// ORIG
 		final_hit_state = Orig(
 			game,
 			play_default_se,
@@ -269,7 +336,6 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 			a16
 		);
 
-		// Autoplay slide evaluation & duplicate echo suppressor
 		AutoPlay::ProcessSlideHit(
 			game,
 			final_hit_state,
@@ -404,7 +470,6 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateHook) {
 	}
 };
 
-// Register preserve stub ensuring proper compiler barrier without I/O overhead
 __attribute__((noinline))
 static void NC_GhostLog(int32_t type, int32_t state, bool correct, bool long_start, bool star_like) {
 	__asm__ volatile("" : : "r"(type), "r"(state), "r"(correct), "r"(long_start), "r"(star_like) : "memory");
@@ -508,10 +573,10 @@ HOOK_DEFINE_TRAMPOLINE(ExecuteModeSelectHook) {
 			switch (mode)
 			{
 			case ModeSelect_ChallengeStart:
-				g_target_height_bits = 0x430A0000; // Reset to 138.0f
+				g_target_height_bits = 0x430A0000;
 				break;
 			case ModeSelect_ChanceStart:
-				g_target_height_bits = 0x43150000; // Set to 149.0f
+				g_target_height_bits = 0x43150000;
 				SetChanceTimeMode(&pv_data->pv_game->ui, ModeSelect_ChanceStart);
 				break;
 			case ModeSelect_ChanceEnd:
@@ -519,7 +584,7 @@ HOOK_DEFINE_TRAMPOLINE(ExecuteModeSelectHook) {
 					pv_data->pv_game->score += score::GetChanceTimeSuccessBonus();
 
 				SetChanceTimeMode(&pv_data->pv_game->ui, ModeSelect_ChanceEnd);
-				g_target_height_bits = 0x430A0000; // Reset to 138.0f
+				g_target_height_bits = 0x430A0000;
 				break;
 			case ModeSelect_TechZoneStart:
 				if (state.tech_zone_index < state.tech_zones.size())
@@ -578,20 +643,15 @@ HOOK_DEFINE_TRAMPOLINE(CalculatePercentageHook) {
 // 6. GetHitStatePlaySE (0x1af5a0)
 HOOK_DEFINE_INLINE(GetHitStatePlaySEHook) {
     static void Callback(exl::hook::nx64::InlineFloatCtx* ctx) {
-        // 1. Save CPU flags (NZCV) before register manipulation
         uint64_t nzcv_backup;
         __asm__ volatile ("mrs %0, nzcv" : "=r"(nzcv_backup));
 
-        // 2. Resolve GP registers X0-X29
         uint64_t* gp_regs = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(ctx) + 0x200);
-
-        // X23 holds target pointer
         PvGameTarget* target = reinterpret_cast<PvGameTarget*>(gp_regs[23]);
 
         if (target != nullptr) {
             int32_t target_type = target->target_type;
 
-            // Mute original sound effect for New Classics custom notes
             if (target_type >= TargetType_Custom && target_type <= TargetType_Max) {
                 static const char* empty_se = "";
                 gp_regs[8] = reinterpret_cast<uint64_t>(empty_se);
@@ -599,7 +659,6 @@ HOOK_DEFINE_INLINE(GetHitStatePlaySEHook) {
             }
         }
 
-        // 3. Restore CPU condition flags
         __asm__ volatile ("msr nzcv, %0" : : "r"(nzcv_backup) : "cc");
     }
 };

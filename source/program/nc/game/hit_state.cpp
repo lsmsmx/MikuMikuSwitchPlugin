@@ -9,6 +9,13 @@
 const float NormalWindow[5]  = { 0.03f, 0.07f, 0.1f,  0.13f };
 const float StarWindow[5]    = { 0.03f, 0.12f, 0.13f, 0.13f };
 
+extern int32_t s_current_hit_frame;
+extern int32_t s_last_hit_frame;
+extern int32_t s_face_tap_frame[4];
+extern int32_t s_arrow_tap_frame[4];
+extern bool s_face_consumed_by_single[4];
+extern bool s_arrow_consumed_by_single[4];
+
 namespace nc
 {
 	static bool CheckTiming(float time, int32_t hit_state, bool star)
@@ -129,24 +136,61 @@ namespace nc
 		// Double Notes (W-notes)
 		if (target->target_type >= TargetType_UpW && target->target_type <= TargetType_LeftW)
 		{
-			ButtonState& face = macro_state.buttons[Button_Triangle + (target->target_type - TargetType_UpW)];
-			ButtonState& arrow = macro_state.buttons[Button_Up + (target->target_type - TargetType_UpW)];
+			int32_t offset = target->target_type - TargetType_UpW;
+			ButtonState& face = macro_state.buttons[Button_Triangle + offset];
+			ButtonState& arrow = macro_state.buttons[Button_Up + offset];
 
 			if (fabs(target->flying_time_remaining) <= NormalWindow[HitState_Sad])
 			{
-				bool wrong_pressed = (macro_state.GetTappedBitfield() & wrong_mask) != 0;
+				bool double_hit = false;
 
-				if ((face.IsTapped() && arrow.IsDown()) || (arrow.IsTapped() && face.IsDown()))
+				// Strictly read this note's face button and arrow button states
+				bool face_down = face.IsDown();
+				bool arrow_down = arrow.IsDown();
+
+				// A fresh tap occurred strictly after the previous note was hit
+				bool face_fresh = (face.IsTapped() || face.IsTappedInNearFrames()) && (s_last_hit_frame < 0 || s_face_tap_frame[offset] > s_last_hit_frame);
+				bool arrow_fresh = (arrow.IsTapped() || arrow.IsTappedInNearFrames()) && (s_last_hit_frame < 0 || s_arrow_tap_frame[offset] > s_last_hit_frame);
+
+				// Case 1: Fresh simultaneous tap on both buttons (AutoPlay, synced fingers, rapid double spam)
+				if (face.IsTapped() && arrow.IsTapped())
+				{
+					double_hit = true;
+				}
+				// Case 2: Near frames desync between two fingers (both taps are fresh, neither stolen from single)
+				else if (face_fresh && arrow_fresh && (face.IsTapped() || arrow.IsTapped() || face.IsTappedInNearFrames() || arrow.IsTappedInNearFrames()))
+				{
+					double_hit = true;
+				}
+				// Case 3: Arrow held (allowed from single), Face freshly tapped (must NOT be consumed by single)
+				else if (face_fresh && arrow_down && !s_face_consumed_by_single[offset])
+				{
+					double_hit = true;
+				}
+				// Case 4: Face held (allowed from single), Arrow freshly tapped (must NOT be consumed by single)
+				else if (arrow_fresh && face_down && !s_arrow_consumed_by_single[offset])
+				{
+					double_hit = true;
+				}
+
+				if (double_hit)
 				{
 					hit = true;
 					wrong = false;
-					*double_tapped = (face.IsTapped() && arrow.IsTappedInNearFrames()) ||
-					                 (arrow.IsTapped() && face.IsTappedInNearFrames());
+					*double_tapped = true;
+
+					s_face_consumed_by_single[offset] = false;
+					s_arrow_consumed_by_single[offset] = false;
 				}
-				else if (wrong_pressed)
+				else
 				{
-					hit = true;
-					wrong = true;
+					// Register wrong press only when note is close to its hit window (<= 40ms)
+					bool wrong_pressed = (macro_state.GetTappedBitfield() & wrong_mask) != 0;
+					if (wrong_pressed && target->flying_time_remaining <= 0.04f)
+					{
+						hit = true;
+						wrong = true;
+					}
 				}
 			}
 		}
@@ -270,6 +314,7 @@ int32_t nc::JudgeNoteHit(PVGameArcade* game, PvGameTarget** group, TargetStateEx
 	}
 	return extras[0]->hit_state;
 }
+
 bool nc::CheckLongNoteHolding(TargetStateEx* ex)
 {
 	if (ex->target_type >= TargetType_TriangleLong && ex->target_type <= TargetType_SquareLong)
@@ -295,7 +340,6 @@ bool nc::CheckLongNoteHolding(TargetStateEx* ex)
 		ex->holding = true;
 		return true;
 	}
-
 
 	ex->holding = false;
 	return false;
