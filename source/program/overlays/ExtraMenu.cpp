@@ -18,7 +18,7 @@ namespace ImGui {
 namespace ExtraMenu {
 
 // Helper button that ensures balanced style color stack
-static void DrawOverlayToggleButton(const char* label, bool& state, float btnW, float btnH = 26.0f) {
+static void DrawOverlayToggleButton(const char* label, bool& state, float btnW, float btnH) {
     bool wasActive = state;
 
     if (wasActive) {
@@ -40,13 +40,16 @@ static void DrawOverlayToggleButton(const char* label, bool& state, float btnW, 
 
 void Draw() {
     if (ImGui::CollapsingHeader("Extra Overlays")) {
+        float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+        float btnH = 26.0f * s;
+
         ImGui::Separator();
 
         const char* modeNames[] = { "Disabled", "Gamepad Overlay", "Keyboard Overlay" };
         int curMode = std::clamp(InputOverlay::GetMode(), 0, 2);
 
         ImGui::Text("Active Input Overlay:");
-        ImGui::PushItemWidth(180);
+        ImGui::PushItemWidth(180.0f * s);
         if (ImGui::BeginCombo("##ActiveInputOverlayCombo", modeNames[curMode])) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
             for (int n = 0; n < 3; n++) {
@@ -70,19 +73,19 @@ void Draw() {
 
         ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.80f, 1.0f), "Quick Open Overlays:");
 
-        DrawOverlayToggleButton(ResScalerUi::g_showWindow ? "Close ResScaler" : "Open ResScaler", ResScalerUi::g_showWindow, btnW);
+        DrawOverlayToggleButton(ResScalerUi::g_showWindow ? "Close ResScaler" : "Open ResScaler", ResScalerUi::g_showWindow, btnW, btnH);
         ImGui::SameLine();
-        DrawOverlayToggleButton(PostProcessUi::g_showWindow ? "Close PostProcess" : "Open PostProcess", PostProcessUi::g_showWindow, btnW);
+        DrawOverlayToggleButton(PostProcessUi::g_showWindow ? "Close PostProcess" : "Open PostProcess", PostProcessUi::g_showWindow, btnW, btnH);
 
-        DrawOverlayToggleButton(DimOverlay::g_showWindow ? "Close Dim UI" : "Open Dim UI", DimOverlay::g_showWindow, btnW);
+        DrawOverlayToggleButton(DimOverlay::g_showWindow ? "Close Dim UI" : "Open Dim UI", DimOverlay::g_showWindow, btnW, btnH);
         ImGui::SameLine();
-        DrawOverlayToggleButton(VolumeOverlay::g_showWindow ? "Close Volume UI" : "Open Volume UI", VolumeOverlay::g_showWindow, btnW);
+        DrawOverlayToggleButton(VolumeOverlay::g_showWindow ? "Close Volume UI" : "Open Volume UI", VolumeOverlay::g_showWindow, btnW, btnH);
 
-        DrawOverlayToggleButton(FpsOverlay::g_showWindow ? "Close FPS" : "Open FPS", FpsOverlay::g_showWindow, btnW);
+        DrawOverlayToggleButton(FpsOverlay::g_showWindow ? "Close FPS" : "Open FPS", FpsOverlay::g_showWindow, btnW, btnH);
         ImGui::SameLine();
-        DrawOverlayToggleButton(MemoryScannerUi::g_showWindow ? "Close BSS Gaps" : "Open BSS Gaps", MemoryScannerUi::g_showWindow, btnW);
+        DrawOverlayToggleButton(MemoryScannerUi::g_showWindow ? "Close BSS Gaps" : "Open BSS Gaps", MemoryScannerUi::g_showWindow, btnW, btnH);
 
-        DrawOverlayToggleButton(MotionPlayerUi::g_showUltimatePlayer ? "Close Motion Player" : "Open Motion Player", MotionPlayerUi::g_showUltimatePlayer, totalAvailW);
+        DrawOverlayToggleButton(MotionPlayerUi::g_showUltimatePlayer ? "Close Motion Player" : "Open Motion Player", MotionPlayerUi::g_showUltimatePlayer, totalAvailW, btnH);
 
         ImGui::Spacing();
         ImGui::Separator();

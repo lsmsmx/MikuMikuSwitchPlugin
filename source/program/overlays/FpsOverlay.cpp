@@ -30,7 +30,9 @@ namespace FpsOverlay {
             fpsColor = ImVec4(1.0f, 0.35f, 0.35f, 1.0f);  // Red
         }
 
-        ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+        float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
+        ImGui::SetNextWindowPos(ImVec2(12.0f * s, 12.0f * s), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
         ImGui::SetNextWindowBgAlpha(0.90f);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -42,19 +44,19 @@ namespace FpsOverlay {
                                  ImGuiWindowFlags_NoNav |
                                  ImGuiWindowFlags_NoInputs;
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 6.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f * s, 6.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f * s);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.28f, 0.88f, 0.83f, 0.40f));
 
         if (ImGui::Begin("###FpsHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
+            // Native fixed multiplier without quadratic compounding
             ImGui::SetWindowFontScale(2.0f);
-
             ImGui::TextColored(fpsColor, "%.1f", s_displayFps);
-
             ImGui::SetWindowFontScale(1.0f);
+
             ImGui::GetWindowDrawList()->PopClipRect();
         }
         ImGui::End();

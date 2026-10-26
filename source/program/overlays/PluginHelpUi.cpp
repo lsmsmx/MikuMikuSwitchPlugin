@@ -15,21 +15,17 @@ namespace ImGui {
 
 namespace PluginHelpUi {
 
-    // Main menu Init and Dest function addresses
     static constexpr uintptr_t ADDR_MAIN_MENU_INIT = 0x00815150;
     static constexpr uintptr_t ADDR_MAIN_MENU_DEST = 0x008161b0;
 
-    // State and SubState BSS variable offsets (from ChangeSubGameState)
     static constexpr uintptr_t OFFSET_GAME_STATE     = 0x00B2B92640;
     static constexpr uintptr_t OFFSET_GAME_SUB_STATE = 0x00B2B9265C;
 
     static bool s_isMainMenuActive = false;
     static uintptr_t s_mainMenuInstance = 0;
 
-    constexpr float DialogW = 780.0f;
-    constexpr float DialogH = 510.0f;
-    constexpr float CanvasW = 1280.0f;
-    constexpr float CanvasH = 720.0f;
+    constexpr float DialogBaseW = 780.0f;
+    constexpr float DialogBaseH = 510.0f;
 
     constexpr float AnimSpeedIn  = 8.0f;
     constexpr float AnimSpeedOut = 9.0f;
@@ -41,9 +37,6 @@ namespace PluginHelpUi {
     constexpr int TotalPages = 2;
     static int s_currentPage = 0;
 
-    // =========================================================
-    // STATE CHECK: HOOKS + DIRECT MEMORY READING
-    // =========================================================
     bool IsMainMenuActive() {
         if (!s_isMainMenuActive || s_mainMenuInstance == 0) {
             return false;
@@ -54,7 +47,6 @@ namespace PluginHelpUi {
             return false;
         }
 
-        // Verify global game state
         uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
         int curState    = *reinterpret_cast<int*>(base + OFFSET_GAME_STATE);
         int curSubState = *reinterpret_cast<int*>(base + OFFSET_GAME_SUB_STATE);
@@ -89,9 +81,6 @@ namespace PluginHelpUi {
         else Open();
     }
 
-    // =========================================================
-    // MAIN MENU SCENE HOOKS
-    // =========================================================
     HOOK_DEFINE_INLINE(MainMenuInitHook) {
         static void Callback(exl::hook::InlineCtx* ctx) {
             s_mainMenuInstance = ctx->X[0];
@@ -118,9 +107,6 @@ namespace PluginHelpUi {
         MainMenuDestHook::InstallAtOffset(ADDR_MAIN_MENU_DEST);
     }
 
-    // =========================================================
-    // INPUT HANDLING (L / R / B)
-    // =========================================================
     void Update() {
         if (!IsOpen()) return;
 
@@ -131,13 +117,11 @@ namespace PluginHelpUi {
         uint64_t pressed = s.buttons & ~s_prevBtns;
         s_prevBtns = s.buttons;
 
-        // Close on B button (Plus button handled in Hints.cpp)
         if (pressed & nn::hid::Button::B) {
             Close();
             return;
         }
 
-        // Page navigation
         if (pressed & (nn::hid::Button::L | nn::hid::Button::Left)) {
             if (s_currentPage > 0) {
                 s_currentPage--;
@@ -190,7 +174,6 @@ namespace PluginHelpUi {
 
     static std::vector<HelpEntry> GetPage2Items() {
         return {
-            // Freecam
             { "L + R + Minus",           "Enable / Disable Camera Override" },
             { "D-Pad (All)",             "Move Forward / Backward / Left / Right" },
             { "Right Stick",             "Look in Desired Direction (Yaw / Pitch)" },
@@ -202,7 +185,6 @@ namespace PluginHelpUi {
 
             { "", "", true },
 
-            // Debug Mode
             { "L + R + Plus",            "Enable / Disable Debug Mode" },
             { "L3",                      "Toggle Virtual Mouse Simulation" },
             { "Left Stick / Sensor",     "Move Mouse Cursor" },
@@ -216,9 +198,6 @@ namespace PluginHelpUi {
         };
     }
 
-    // =========================================================
-    // MAIN RENDER ROUTINE
-    // =========================================================
     void Draw() {
         Update();
 
@@ -244,12 +223,14 @@ namespace PluginHelpUi {
             }
         }
 
-        float alpha = std::clamp(s_animProgress, 0.0f, 1.0f);
-        float scale = 0.88f + 0.12f * std::sin(alpha * 1.5707963f);
+        float s = io.DisplaySize.y / 720.0f;
 
-        float curW = DialogW * scale;
-        float curH = DialogH * scale;
-        ImVec2 center((CanvasW - curW) * 0.5f, (CanvasH - curH) * 0.5f);
+        float alpha = std::clamp(s_animProgress, 0.0f, 1.0f);
+        float scale = (0.88f + 0.12f * std::sin(alpha * 1.5707963f)) * s;
+
+        float curW = DialogBaseW * scale;
+        float curH = DialogBaseH * scale;
+        ImVec2 center((io.DisplaySize.x - curW) * 0.5f, (io.DisplaySize.y - curH) * 0.5f);
 
         ImGui::SetNextWindowPos(center, ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(curW, curH), ImGuiCond_Always);
@@ -266,83 +247,117 @@ namespace PluginHelpUi {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRectFullScreen();
 
-            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(245, 252, 252, (int)(248.0f * alpha)), 14.0f);
-            drawList->AddRect(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(0, 206, 209, (int)(225.0f * alpha)), 14.0f, 0, 2.5f);
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(245, 252, 252, (int)(248.0f * alpha)), 14.0f * s);
+            drawList->AddRect(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(0, 206, 209, (int)(225.0f * alpha)), 14.0f * s, 0, 2.5f * s);
 
+            // 1. Top Header Bar (Vertically centered title)
             float topH = 38.0f * scale;
-            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + topH), IM_COL32(0, 150, 180, (int)(250.0f * alpha)), 14.0f, ImDrawFlags_RoundCornersTop);
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + topH), IM_COL32(0, 150, 180, (int)(250.0f * alpha)), 14.0f * s, ImDrawFlags_RoundCornersTop);
 
             const char* topTitle = "MikuMikuSwitchPlugin Manual";
             ImGui::SetWindowFontScale(1.60f);
             ImVec2 topTextSz = ImGui::CalcTextSize(topTitle);
-            DrawBoldText(drawList, ImVec2(center.x + (curW - topTextSz.x) * 0.5f, center.y + 7.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), topTitle);
+            float topTitleY = center.y + (topH - topTextSz.y) * 0.5f;
+            DrawBoldText(drawList, ImVec2(center.x + (curW - topTextSz.x) * 0.5f, topTitleY), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), topTitle);
             ImGui::SetWindowFontScale(1.0f);
 
+            // 2. Banner Ribbon (Vertically centered text and tags)
             const char* bannerTitles[TotalPages] = { "System & Overlay Hotkeys", "Freecam & In-Game Debug" };
             float ribbonW = 320.0f * scale;
             float ribbonH = 26.0f * scale;
-            ImVec2 ribbonPos(center.x + (curW - ribbonW) * 0.5f, center.y + 45.0f);
-            drawList->AddRectFilled(ribbonPos, ImVec2(ribbonPos.x + ribbonW, ribbonPos.y + ribbonH), IM_COL32(24, 88, 160, (int)(235.0f * alpha)), 8.0f);
+            ImVec2 ribbonPos(center.x + (curW - ribbonW) * 0.5f, center.y + 45.0f * s);
+            drawList->AddRectFilled(ribbonPos, ImVec2(ribbonPos.x + ribbonW, ribbonPos.y + ribbonH), IM_COL32(24, 88, 160, (int)(235.0f * alpha)), 8.0f * s);
 
             ImGui::SetWindowFontScale(1.40f);
             ImVec2 bTextSz = ImGui::CalcTextSize(bannerTitles[s_currentPage]);
-            DrawBoldText(drawList, ImVec2(ribbonPos.x + (ribbonW - bTextSz.x) * 0.5f, ribbonPos.y + 4.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), bannerTitles[s_currentPage]);
+            float bTextY = ribbonPos.y + (ribbonH - bTextSz.y) * 0.5f;
+            DrawBoldText(drawList, ImVec2(ribbonPos.x + (ribbonW - bTextSz.x) * 0.5f, bTextY), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), bannerTitles[s_currentPage]);
             ImGui::SetWindowFontScale(1.0f);
 
             const char* leftTag = "Touch / Sensor Supported";
-            DrawBoldText(drawList, ImVec2(center.x + 22.0f, center.y + 50.0f), IM_COL32(0, 160, 185, (int)(230.0f * alpha)), leftTag);
+            ImVec2 leftTagSz = ImGui::CalcTextSize(leftTag);
+            float tagY = ribbonPos.y + (ribbonH - leftTagSz.y) * 0.5f;
+            DrawBoldText(drawList, ImVec2(center.x + 22.0f * s, tagY), IM_COL32(0, 160, 185, (int)(230.0f * alpha)), leftTag);
 
             const char* rightTag = "Version 11.0";
             ImVec2 rightTagSz = ImGui::CalcTextSize(rightTag);
-            DrawBoldText(drawList, ImVec2(center.x + curW - 24.0f - rightTagSz.x, center.y + 50.0f), IM_COL32(0, 160, 185, (int)(230.0f * alpha)), rightTag);
+            DrawBoldText(drawList, ImVec2(center.x + curW - 24.0f * s - rightTagSz.x, tagY), IM_COL32(0, 160, 185, (int)(230.0f * alpha)), rightTag);
 
+            // 3. Dynamic Vertical Centering of Items List
             auto items = (s_currentPage == 0) ? GetPage1Items() : GetPage2Items();
 
-            float startY  = center.y + 78.0f;
-            float rowH    = (s_currentPage == 0) ? 29.0f : 21.0f;
-            float pillW   = (curW - 40.0f);
-            float pillH   = (s_currentPage == 0) ? 22.5f : 19.5f;
+            float rowH    = (s_currentPage == 0) ? (29.0f * s) : (21.0f * s);
+            float pillW   = (curW - 40.0f * s);
+            float pillH   = (s_currentPage == 0) ? (22.5f * s) : (19.5f * s);
             float keyColW = 210.0f * scale;
 
-            float curY = startY;
+            float totalListH = 0.0f;
+            for (size_t i = 0; i < items.size(); i++) {
+                if (items[i].isSeparator) {
+                    totalListH += 8.0f * s;
+                } else {
+                    totalListH += (i == items.size() - 1) ? pillH : rowH;
+                }
+            }
+
+            float topContentBottom = ribbonPos.y + ribbonH + 8.0f * s;
+            float footerTop        = center.y + curH - 34.0f * s;
+            float availH           = footerTop - topContentBottom;
+
+            float curY = topContentBottom;
+            if (availH > totalListH) {
+                curY = topContentBottom + (availH - totalListH) * 0.5f;
+            }
 
             for (size_t i = 0; i < items.size(); i++) {
                 if (items[i].isSeparator) {
-                    float sepY = curY + 3.0f;
-                    drawList->AddLine(ImVec2(center.x + 24.0f, sepY), ImVec2(center.x + curW - 24.0f, sepY),
+                    float sepY = curY + 3.0f * s;
+                    drawList->AddLine(ImVec2(center.x + 24.0f * s, sepY), ImVec2(center.x + curW - 24.0f * s, sepY),
                                       IM_COL32(0, 180, 200, (int)(180.0f * alpha)), 1.5f);
-                    curY += 8.0f;
+                    curY += 8.0f * s;
                     continue;
                 }
 
-                ImVec2 pPos(center.x + 20.0f, curY);
+                ImVec2 pPos(center.x + 20.0f * s, curY);
 
                 drawList->AddRectFilled(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(230, 238, 242, (int)(210.0f * alpha)), pillH * 0.4f);
                 drawList->AddRect(pPos, ImVec2(pPos.x + pillW, pPos.y + pillH), IM_COL32(185, 202, 212, (int)(150.0f * alpha)), pillH * 0.4f, 0, 1.0f);
 
-                ImVec2 keyCapMin(pPos.x + 3.0f, pPos.y + 1.5f);
-                ImVec2 keyCapMax(pPos.x + keyColW, pPos.y + pillH - 1.5f);
-                drawList->AddRectFilled(keyCapMin, keyCapMax, IM_COL32(0, 155, 170, (int)(235.0f * alpha)), (pillH - 3.0f) * 0.4f);
+                float keyCapH = pillH - 3.0f * s;
+                ImVec2 keyCapMin(pPos.x + 3.0f * s, pPos.y + 1.5f * s);
+                ImVec2 keyCapMax(pPos.x + keyColW, pPos.y + pillH - 1.5f * s);
+                drawList->AddRectFilled(keyCapMin, keyCapMax, IM_COL32(0, 155, 170, (int)(235.0f * alpha)), keyCapH * 0.4f);
 
                 ImVec2 keyTextSz = ImGui::CalcTextSize(items[i].combo.c_str());
-                DrawBoldText(drawList, ImVec2(keyCapMin.x + (keyColW - 3.0f - keyTextSz.x) * 0.5f, keyCapMin.y + (pillH - 3.0f - keyTextSz.y) * 0.5f),
+                float keyTextY = keyCapMin.y + (keyCapH - keyTextSz.y) * 0.5f;
+                DrawBoldText(drawList, ImVec2(keyCapMin.x + (keyColW - 3.0f * s - keyTextSz.x) * 0.5f, keyTextY),
                              IM_COL32(255, 255, 255, (int)(255.0f * alpha)), items[i].combo.c_str());
 
-                float descX = pPos.x + keyColW + 12.0f;
+                float descX = pPos.x + keyColW + 12.0f * s;
                 ImVec2 descTextSz = ImGui::CalcTextSize(items[i].desc.c_str());
-                drawList->AddText(ImVec2(descX, pPos.y + (pillH - descTextSz.y) * 0.5f),
+                float descTextY = pPos.y + (pillH - descTextSz.y) * 0.5f;
+                drawList->AddText(ImVec2(descX, descTextY),
                                   IM_COL32(40, 55, 70, (int)(240.0f * alpha)), items[i].desc.c_str());
 
                 curY += rowH;
             }
 
-            float pageY = center.y + curH - 26.0f;
+            // 4. Footer Bar (Vertically centered navigation)
+            float footerAreaH = 34.0f * s;
+            float footerCenterY = center.y + curH - footerAreaH * 0.5f;
+
             std::string pageStr = (s_currentPage == 0) ? "<   Page 1 / 2   >" : "<   Page 2 / 2   >";
             ImVec2 pageSz = ImGui::CalcTextSize(pageStr.c_str());
-            DrawBoldText(drawList, ImVec2(center.x + (curW - pageSz.x) * 0.5f, pageY), IM_COL32(0, 150, 180, (int)(255.0f * alpha)), pageStr.c_str());
+            DrawBoldText(drawList, ImVec2(center.x + (curW - pageSz.x) * 0.5f, footerCenterY - pageSz.y * 0.5f),
+                         IM_COL32(0, 150, 180, (int)(255.0f * alpha)), pageStr.c_str());
 
-            DrawBoldText(drawList, ImVec2(center.x + 35.0f, pageY), IM_COL32(0, 130, 155, (int)(230.0f * alpha)), "[L]");
-            DrawBoldText(drawList, ImVec2(center.x + curW - 55.0f, pageY), IM_COL32(0, 130, 155, (int)(230.0f * alpha)), "[R]");
+            ImVec2 lSz = ImGui::CalcTextSize("[L]");
+            DrawBoldText(drawList, ImVec2(center.x + 35.0f * s, footerCenterY - lSz.y * 0.5f),
+                         IM_COL32(0, 130, 155, (int)(230.0f * alpha)), "[L]");
+
+            ImVec2 rSz = ImGui::CalcTextSize("[R]");
+            DrawBoldText(drawList, ImVec2(center.x + curW - 35.0f * s - rSz.x, footerCenterY - rSz.y * 0.5f),
+                         IM_COL32(0, 130, 155, (int)(230.0f * alpha)), "[R]");
 
             drawList->PopClipRect();
         }

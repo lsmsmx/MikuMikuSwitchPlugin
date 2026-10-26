@@ -33,9 +33,6 @@ static bool s_confirmRestoreBackup = false;
 static std::string s_statusMessage = "";
 static float s_statusTimer = 0.0f;
 
-// =========================================================
-// SWITCH RTC CLOCK FOR BACKUP FOLDER NAMING
-// =========================================================
 struct SwitchCalendarTime {
     int16_t year;   // +0x00
     int8_t  month;  // +0x02 (1..12)
@@ -107,9 +104,6 @@ static std::string GenerateBackupFolderName() {
     return std::string(buf);
 }
 
-// =========================================================
-// FILE SYSTEM
-// =========================================================
 static void EnsureDirectory(const char* path) {
     nn::fs::DirectoryHandle dir;
     if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, path, 1))) {
@@ -306,9 +300,11 @@ void Draw() {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRectFullScreen();
 
+        float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
         ImGui::Separator();
 
-        const float blockW = 270.0f;
+        const float blockW = 270.0f * s;
         const float startX = ImGui::GetCursorPosX();
 
         float dt = ImGui::GetIO().DeltaTime;
@@ -318,18 +314,18 @@ void Draw() {
         }
 
         if (!s_confirmCreateBackup) {
-            if (ImGui::Button("Backup Save/Folder", ImVec2(blockW, 26.0f))) {
+            if (ImGui::Button("Backup Save/Folder", ImVec2(blockW, 26.0f * s))) {
                 s_confirmCreateBackup = true;
             }
         } else {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.45f, 0.10f, 0.95f));
-            if (ImGui::Button("Confirm Backup?", ImVec2(195.0f, 26.0f))) {
+            if (ImGui::Button("Confirm Backup?", ImVec2(195.0f * s, 26.0f * s))) {
                 DoCreateBackup();
                 s_confirmCreateBackup = false;
             }
             ImGui::PopStyleColor();
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(68.0f, 26.0f))) {
+            if (ImGui::Button("Cancel", ImVec2(68.0f * s, 26.0f * s))) {
                 s_confirmCreateBackup = false;
             }
         }
@@ -342,10 +338,10 @@ void Draw() {
         ImGui::Text("Dumps (%d)", total_items);
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX(startX + blockW - 68.0f);
+        ImGui::SetCursorPosX(startX + blockW - (68.0f * s));
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 3.5f));
-        if (ImGui::Button("Refresh", ImVec2(68.0f, 24.0f))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * s, 3.5f * s));
+        if (ImGui::Button("Refresh", ImVec2(68.0f * s, 24.0f * s))) {
             RefreshBackupList();
         }
         ImGui::PopStyleVar();
@@ -358,13 +354,12 @@ void Draw() {
             int startIdx = s_currentPage * items_per_page;
             int endIdx   = std::min(startIdx + items_per_page, total_items);
 
-            const float btnW = (blockW - 12.0f) * 0.25f;
-            const float btnH = 26.0f;
+            const float btnW = (blockW - (12.0f * s)) * 0.25f;
+            const float btnH = 26.0f * s;
 
             for (int i = startIdx; i < endIdx; i++) {
                 if ((i - startIdx) % 4 != 0) ImGui::SameLine();
 
-                // Extract date (DD.MM) from "Backup_YYYY-MM-DD..."
                 char labelBuf[32];
                 const std::string& fullName = s_backupList[i];
                 if (fullName.length() >= 17 && fullName.rfind("Backup_", 0) == 0) {
@@ -391,7 +386,7 @@ void Draw() {
 
             float navRowStartX = ImGui::GetCursorPosX();
 
-            if (ImGui::Button("<##bkprev", ImVec2(34.0f, 24.0f))) {
+            if (ImGui::Button("<##bkprev", ImVec2(34.0f * s, 24.0f * s))) {
                 if (s_currentPage > 0) s_currentPage--;
             }
 
@@ -405,16 +400,16 @@ void Draw() {
             ImGui::TextUnformatted(pageStr);
 
             ImGui::SameLine();
-            ImGui::SetCursorPosX(navRowStartX + blockW - 34.0f);
-            if (ImGui::Button(">##bknext", ImVec2(34.0f, 24.0f))) {
+            ImGui::SetCursorPosX(navRowStartX + blockW - (34.0f * s));
+            if (ImGui::Button(">##bknext", ImVec2(34.0f * s, 24.0f * s))) {
                 if (s_currentPage < total_pages - 1) s_currentPage++;
             }
 
             if (s_selectedBackupIdx >= 0 && s_selectedBackupIdx < total_items) {
                 ImGui::TextColored(ImVec4(0.30f, 0.85f, 0.80f, 1.0f), "%s", s_backupList[s_selectedBackupIdx].c_str());
 
-                const float actionBtnW = (blockW - 6.0f) * 0.5f;
-                const float actionBtnH = 28.0f;
+                const float actionBtnW = (blockW - (6.0f * s)) * 0.5f;
+                const float actionBtnH = 28.0f * s;
 
                 // Restore
                 if (!s_confirmRestoreBackup) {

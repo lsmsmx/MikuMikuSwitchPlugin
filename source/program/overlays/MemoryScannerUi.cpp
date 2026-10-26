@@ -153,7 +153,9 @@ namespace MemoryScannerUi {
         s_lastL3State = l3Down;
 
         ImVec2 screenSize = ImGui::GetIO().DisplaySize;
-        ImGui::SetNextWindowPos(ImVec2(screenSize.x - 12.0f, 12.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+        float s = screenSize.y / 720.0f;
+
+        ImGui::SetNextWindowPos(ImVec2(screenSize.x - (12.0f * s), 12.0f * s), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
         ImGui::SetNextWindowBgAlpha(0.85f);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -162,13 +164,16 @@ namespace MemoryScannerUi {
                                  ImGuiWindowFlags_NoMove |
                                  ImGuiWindowFlags_NoSavedSettings;
 
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * s, 8.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f * s, 4.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
+
         if (ImGui::Begin("###BSSGapsHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-            // Perfect vertical baseline alignment
             ImGui::AlignTextToFramePadding();
             ImGui::TextColored(ImVec4(0.28f, 0.88f, 0.83f, 1.0f), "BSS RAM (32MB+ Gaps)");
-            ImGui::SameLine(165.0f);
+            ImGui::SameLine(165.0f * s);
 
             bool isFlashing = (s_clickFlashTimer > 0.0f);
             if (isFlashing) {
@@ -176,7 +181,7 @@ namespace MemoryScannerUi {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.45f, 0.43f, 0.95f));
             }
 
-            if (ImGui::Button("Update L3", ImVec2(75, 0))) {
+            if (ImGui::Button("Update L3", ImVec2(75.0f * s, 0.0f))) {
                 ScanGaps();
                 s_clickFlashTimer = 0.20f;
             }
@@ -195,7 +200,7 @@ namespace MemoryScannerUi {
                 for (size_t i = 0; i < s_gaps.size(); i++) {
                     const auto& g = s_gaps[i];
                     ImGui::Text("[%02zu] +0x%08lX", i, g.startOffset);
-                    ImGui::SameLine(165.0f);
+                    ImGui::SameLine(165.0f * s);
                     ImGui::TextColored(ImVec4(0.28f, 0.88f, 0.83f, 1.0f), "%.1f MB", g.sizeMB);
                 }
             }
@@ -203,6 +208,8 @@ namespace MemoryScannerUi {
             ImGui::GetWindowDrawList()->PopClipRect();
         }
         ImGui::End();
+
+        ImGui::PopStyleVar(3);
     }
 
 } // namespace MemoryScannerUi

@@ -43,9 +43,11 @@ bool Config::extraFtGraphics = false;
 bool Config::no3D = false;
 bool Config::noMV = false;
 bool Config::backMV = false;
+bool Config::enableTaa = false;
 std::string Config::antiAliasing = "fxaa";
 std::string Config::magFilterMode = "default";
 std::string Config::ssaaMode = "off";
+std::string Config::gameRes = "default";
 float Config::shadowIntensity = 1.0f;
 float Config::reflectionQuality = 1.0f;
 float Config::exposure = -1.0f;
@@ -152,18 +154,19 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "acapellaMode = " + std::string(Config::acapellaMode ? "true" : "false") + "\n\n";
 
     tomlContent += "[graphics]\n";
-    tomlContent += "# NOTE: for best looking graphics use dock/fakedock mode using ReverseNX + -no_npr in args.txt\n";
-    tomlContent += "# Disables ADP (Adaptive Performance) system completely\n";
+    tomlContent += "# Disables ADP (Adaptive Performance) system completely [UNLOCKS FT] + auto -no_npr\n";
     tomlContent += "disable_adp = " + std::string(Config::disableAdp ? "true" : "false") + "\n";
     tomlContent += "# Enable Subsurface Scattering (SSS) for Future Tone style graphics\n";
     tomlContent += "enable_sss = " + std::string(Config::enableSss ? "true" : "false") + "\n";
-    tomlContent += "# Customization menu graphics in AFT/FT style (removes cell-shading in menu)\n";
+    tomlContent += "# Customization menu graphics in FT style \n";
     tomlContent += "cstm_menu_ft_style = " + std::string(Config::cstmMenuFtStyle ? "true" : "false") + "\n";
+    tomlContent += "# Enable Temporal Anti-Aliasing (TAA) PS4-style\n";
+    tomlContent += "enable_taa = " + std::string(Config::enableTaa ? "true" : "false") + "\n";
     tomlContent += "# Anti-Aliasing mode: \"mlaa\", \"fxaa\", \"off\"\n";
     tomlContent += "anti_aliasing = \"" + Config::antiAliasing + "\"\n";
     tomlContent += "# Texture Magnification Filter: \"bilinear\", \"nearest\", \"sharpen_5tap\", \"sharpen_4tap\", \"cone_4tap\", \"cone_2tap\", \"default\"\n";
     tomlContent += "mag_filter = \"" + Config::magFilterMode + "\"\n";
-    tomlContent += "# Forces Future Tone Mode extra patches to get maximumly close to MM+ \n";
+    tomlContent += "# Forces Future Tone Mode extra patches to get maximumly close to MM+\n";
     tomlContent += "extraFtGraphics = " + std::string(Config::extraFtGraphics ? "true" : "false") + "\n";
     tomlContent += "# SSAA (Super Sampling) mode: \"on\", \"off\"\n";
     tomlContent += "ssaa_mode = \"" + Config::ssaaMode + "\"\n";
@@ -196,6 +199,9 @@ static void SaveConfig(const std::string& path) {
     tomlContent += "fxaa_subpix = " + std::to_string(Config::fxaaQualitySubpix) + "\n";
     tomlContent += "fxaa_edge_threshold = " + std::to_string(Config::fxaaQualityEdgeThreshold) + "\n";
     tomlContent += "fxaa_edge_threshold_min = " + std::to_string(Config::fxaaQualityEdgeThresholdMin) + "\n\n";
+
+    tomlContent += "# Sets internal target resolution: \"hdtv720\" (1280x720), \"hdtv720_dbd\" (1280x720), \"hdtv1080\" (1920x1080), \"wqhd\" (2560x1440), \"wvga\" (854x480), \"qvga\" (320x240), \"vga\" (640x480), \"svga\" (800x600), \"xga\" (1024x768), \"wxga\" (1280x768), \"wxga_dbd\" (1280x768), \"uxga\" (1600x1200), \"wuxga\" (1920x1200), \"wqxga\" (2560x1600), \"default\"\n";
+    tomlContent += "game_res = \"" + Config::gameRes + "\"\n\n";
 
     tomlContent += "# Preset resolution toggles using predefined FT/AFT resolution patches\n";
     tomlContent += "ft_shadows = " + std::string(Config::ftShadows ? "true" : "false") + "\n";
@@ -346,6 +352,7 @@ bool Config::init() {
             noMV = config["graphics"]["noMV"].value_or(false);
             backMV = config["graphics"]["backMV"].value_or(false);
             disableAdp = config["graphics"]["disable_adp"].value_or(false);
+            enableTaa = config["graphics"]["enable_taa"].value_or(false);
             antiAliasing = config["graphics"]["anti_aliasing"].value_or("fxaa");
             enableSss = config["graphics"]["enable_sss"].value_or(false);
             cstmMenuFtStyle = config["graphics"]["cstm_menu_ft_style"].value_or(false);
@@ -365,6 +372,7 @@ bool Config::init() {
             disableDOF = config["graphics"]["force_disable_DOF"].value_or(false);
             extraFtGraphics = config["graphics"]["extraFtGraphics"].value_or(false);
             magFilterMode = config["graphics"]["mag_filter"].value_or("default");
+            gameRes = config["graphics"]["game_res"].value_or("default");
 
             ftShadows = config["graphics"]["ft_shadows"].value_or(false);
             ftReflect = config["graphics"]["ft_reflect"].value_or(false);

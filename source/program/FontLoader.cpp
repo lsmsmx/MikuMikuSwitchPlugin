@@ -1,5 +1,8 @@
 #include "FontLoader.hpp"
 #include <cstddef>
+#include <cmath>
+#include <algorithm>
+#include "lib.hpp"
 
 namespace nn::pl {
     enum SharedFontType {
@@ -47,14 +50,23 @@ namespace FontLoader {
                 0,
             };
 
+            // Dynamically resolve target scale from engine height (720p = 1.0, 1080p = 1.5, 1440p = 2.0, 4K = 3.0)
+            uintptr_t mainBase = exl::util::GetMainModuleInfo().m_Total.m_Start;
+            uint32_t engineHeight = *(uint32_t*)(mainBase + 0x00CA8970);
+            float scale = (engineHeight >= 360 && engineHeight <= 4320) ? ((float)engineHeight / 720.0f) : 1.0f;
+
+            // Base font scaled directly from original 11.0f design
+            float baseFontSize = std::round(11.0f * scale);
+            if (baseFontSize < 11.0f) baseFontSize = 11.0f;
+
             ImFontConfig cfg {};
             cfg.FontDataOwnedByAtlas = false;
-            cfg.SizePixels           = 11.0f;
+            cfg.SizePixels           = baseFontSize;
 
-            // Oversample must be set to 1 to avoid running out of font atlas memory and crashing
-            cfg.OversampleH          = 1;
+            // Subpixel anti-aliasing without memory overhead
+            cfg.OversampleH          = 2;
             cfg.OversampleV          = 1;
-            cfg.PixelSnapH           = true;
+            cfg.PixelSnapH           = false;
             cfg.GlyphRanges          = s_ranges;
 
             io.Fonts->AddFontFromMemoryTTF(

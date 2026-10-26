@@ -94,10 +94,10 @@ HOOK_DEFINE_TRAMPOLINE(GetHitStateInternalHook) {
 
 		game_state.PushActiveTarget(target);
 
-		// Prevent sequential notes with different hit times from being judged in the exact same frame
-		if (s_last_hit_frame >= 0 && s_current_hit_frame <= s_last_hit_frame + 2 && target->hit_time != s_last_hit_time) {
-			return HitState_None;
-		}
+		// // Prevent sequential notes with different hit times from being judged in the exact same frame
+		// if (s_last_hit_frame >= 0 && s_current_hit_frame <= s_last_hit_frame + 2 && target->hit_time != s_last_hit_time) {
+		// 	return HitState_None;
+		// }
 
 		int32_t t_type = target->target_type;
 

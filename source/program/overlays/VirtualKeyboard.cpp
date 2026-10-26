@@ -111,6 +111,7 @@ static void ClearAtCursor() {
 void Draw() {
     ImGuiIO& io = ImGui::GetIO();
     float dt = io.DeltaTime;
+    float s = io.DisplaySize.y / 720.0f;
 
     if (s_skipCloseFrames > 0) {
         s_skipCloseFrames--;
@@ -123,10 +124,10 @@ void Draw() {
 
     if (s_kbAnim <= 0.005f) return;
 
-    const float kbWidth  = 1180.0f;
-    const float kbHeight = 250.0f;
+    const float kbWidth  = 1180.0f * s;
+    const float kbHeight = 250.0f * s;
     const float startX   = (io.DisplaySize.x - kbWidth) * 0.5f;
-    const float startY   = io.DisplaySize.y - (kbHeight + 10.0f) * s_kbAnim;
+    const float startY   = io.DisplaySize.y - (kbHeight + 10.0f * s) * s_kbAnim;
 
     ImGui::SetNextWindowPos(ImVec2(startX, startY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(kbWidth, kbHeight), ImGuiCond_Always);
@@ -146,14 +147,14 @@ void Draw() {
 
         ImU32 colBg = IM_COL32(18, 22, 26, (int)(250 * s_kbAnim));
         ImU32 colBd = IM_COL32(255, 255, 255, (int)(45 * s_kbAnim));
-        draw->AddRectFilled(ImVec2(startX, startY), ImVec2(startX + kbWidth, startY + kbHeight), colBg, 10.0f);
-        draw->AddRect(ImVec2(startX, startY), ImVec2(startX + kbWidth, startY + kbHeight), colBd, 10.0f, 0, 1.2f);
+        draw->AddRectFilled(ImVec2(startX, startY), ImVec2(startX + kbWidth, startY + kbHeight), colBg, 10.0f * s);
+        draw->AddRect(ImVec2(startX, startY), ImVec2(startX + kbWidth, startY + kbHeight), colBd, 10.0f * s, 0, 1.2f);
 
         ImFont* font = ImGui::GetFont();
-        float baseFontSz = (font->FontSize > 18.0f) ? (font->FontSize * 0.65f) : font->FontSize;
+        float baseFontSz = font->FontSize;
 
-        const float btnH = 40.0f;
-        const float gap  = 4.0f;
+        const float btnH = 40.0f * s;
+        const float gap  = 4.0f * s;
 
         bool isMouseClicked = ImGui::IsMouseClicked(0);
         ImVec2 mousePos = io.MousePos;
@@ -165,7 +166,7 @@ void Draw() {
             bool isDown = isHovered && ImGui::IsMouseDown(0);
 
             ImU32 bg = isDown ? colorPrs : (isHovered ? colorHov : colorBase);
-            draw->AddRectFilled(pMin, pMax, bg, 4.0f);
+            draw->AddRectFilled(pMin, pMax, bg, 4.0f * s);
 
             float fSize = baseFontSz * (strlen(label) <= 2 ? 1.30f : 1.10f);
             ImVec2 txtSz = font->CalcTextSizeA(fSize, FLT_MAX, 0.0f, label);
@@ -181,28 +182,28 @@ void Draw() {
         ImU32 txtCol = IM_COL32(235, 240, 245, (int)(250 * s_kbAnim));
         ImU32 txtPrs = IM_COL32(35, 42, 48, (int)(255 * s_kbAnim));
 
-        float curY = startY + 8.0f;
+        float curY = startY + 8.0f * s;
 
         const char* r0[] = {"1","2","3","4","5","6","7","8","9","0","-","_","!","&","?"};
-        float r0_btnW = (kbWidth - 16.0f - (15 * gap) - 75.0f) / 15.0f;
-        float curX = startX + 8.0f;
+        float r0_btnW = (kbWidth - 16.0f * s - (15 * gap) - 75.0f * s) / 15.0f;
+        float curX = startX + 8.0f * s;
         for (int i = 0; i < 15; i++) {
             if (DrawPassiveButton(r0[i], curX, curY, r0_btnW, btnH, btnBg, btnHov, btnPrs, txtCol)) {
                 InsertTextAtCursor(r0[i]);
             }
             curX += r0_btnW + gap;
         }
-        if (DrawPassiveButton("<-", curX, curY, 75.0f, btnH, btnBg, btnHov, btnPrs, txtCol)) {
+        if (DrawPassiveButton("<-", curX, curY, 75.0f * s, btnH, btnBg, btnHov, btnPrs, txtCol)) {
             BackspaceAtCursor();
         }
 
         curY += btnH + gap;
-        curX = startX + 8.0f;
+        curX = startX + 8.0f * s;
 
         const char* r1_upper[] = {"Q","W","E","R","T","Y","U","I","O","P","(",")","/","'"};
         const char* r1_lower[] = {"q","w","e","r","t","y","u","i","o","p","(",")","/","'"};
         const char** r1 = s_capsLock ? r1_upper : r1_lower;
-        float r1_btnW = (kbWidth - 16.0f - (13 * gap)) / 14.0f;
+        float r1_btnW = (kbWidth - 16.0f * s - (13 * gap)) / 14.0f;
         for (int i = 0; i < 14; i++) {
             if (DrawPassiveButton(r1[i], curX, curY, r1_btnW, btnH, btnBg, btnHov, btnPrs, txtCol)) {
                 InsertTextAtCursor(r1[i]);
@@ -211,10 +212,10 @@ void Draw() {
         }
 
         curY += btnH + gap;
-        curX = startX + 8.0f;
+        curX = startX + 8.0f * s;
 
-        float capsBtnW = 65.0f;
-        float clrBtnW  = 75.0f;
+        float capsBtnW = 65.0f * s;
+        float clrBtnW  = 75.0f * s;
         ImU32 capsBg  = s_capsLock ? IM_COL32(0, 204, 166, (int)(245 * s_kbAnim)) : btnBg;
         ImU32 capsTxt = s_capsLock ? IM_COL32(20, 25, 30, (int)(255 * s_kbAnim))  : txtCol;
         if (DrawPassiveButton("CAPS", curX, curY, capsBtnW, btnH, capsBg, btnHov, btnPrs, capsTxt)) {
@@ -225,7 +226,7 @@ void Draw() {
         const char* r2_upper[] = {"A","S","D","F","G","H","J","K","L",":",";","~"};
         const char* r2_lower[] = {"a","s","d","f","g","h","j","k","l",":",";","~"};
         const char** r2 = s_capsLock ? r2_upper : r2_lower;
-        float r2_btnW = (kbWidth - 16.0f - (13 * gap) - capsBtnW - clrBtnW) / 12.0f;
+        float r2_btnW = (kbWidth - 16.0f * s - (13 * gap) - capsBtnW - clrBtnW) / 12.0f;
         for (int i = 0; i < 12; i++) {
             if (DrawPassiveButton(r2[i], curX, curY, r2_btnW, btnH, btnBg, btnHov, btnPrs, txtCol)) {
                 InsertTextAtCursor(r2[i]);
@@ -237,12 +238,12 @@ void Draw() {
         }
 
         curY += btnH + gap;
-        curX = startX + 8.0f;
+        curX = startX + 8.0f * s;
 
         const char* r3_upper[] = {"Z","X","C","V","B","N","M",",",".","\"","+","@"};
         const char* r3_lower[] = {"z","x","c","v","b","n","m",",",".","\"","+","@"};
         const char** r3 = s_capsLock ? r3_upper : r3_lower;
-        float r3_btnW = (kbWidth - 16.0f - (11 * gap)) / 12.0f;
+        float r3_btnW = (kbWidth - 16.0f * s - (11 * gap)) / 12.0f;
         for (int i = 0; i < 12; i++) {
             if (DrawPassiveButton(r3[i], curX, curY, r3_btnW, btnH, btnBg, btnHov, btnPrs, txtCol)) {
                 InsertTextAtCursor(r3[i]);
@@ -251,12 +252,12 @@ void Draw() {
         }
 
         curY += btnH + gap;
-        curX = startX + 8.0f;
+        curX = startX + 8.0f * s;
 
-        float closeW  = 65.0f;
-        float arrowW  = 50.0f;
-        float jumpW   = 200.0f;
-        float spaceW  = kbWidth - 16.0f - (4 * gap) - closeW - (arrowW * 2.0f) - jumpW;
+        float closeW  = 65.0f * s;
+        float arrowW  = 50.0f * s;
+        float jumpW   = 200.0f * s;
+        float spaceW  = kbWidth - 16.0f * s - (4 * gap) - closeW - (arrowW * 2.0f) - jumpW;
 
         if (DrawPassiveButton("CLOSE", curX, curY, closeW, btnH, IM_COL32(60, 30, 35, 235), IM_COL32(90, 40, 45, 255), btnPrs, txtCol)) {
             s_isOpen = false;

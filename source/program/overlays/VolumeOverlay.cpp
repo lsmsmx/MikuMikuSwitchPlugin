@@ -27,23 +27,24 @@ namespace VolumeOverlay {
 
         ImGuiIO& io = ImGui::GetIO();
         ImVec2 screenSize = io.DisplaySize;
+        float s = screenSize.y / 720.0f;
 
-        const float cardW = 46.0f;
-        const float cardH = 216.0f;
-        const float cardGap = 8.0f;
+        const float cardW = 46.0f * s;
+        const float cardH = 216.0f * s;
+        const float cardGap = 8.0f * s;
         const float totalCardsW = (cardW * 3.0f) + (cardGap * 2.0f);
 
-        const float badgeW = 74.0f;
-        const float badgeH = 24.0f;
-        const float badgeGapY = 6.0f;
+        const float badgeW = 74.0f * s;
+        const float badgeH = 24.0f * s;
+        const float badgeGapY = 6.0f * s;
 
         const float totalOverlayH = badgeH + badgeGapY + cardH;
 
-        const float originX = screenSize.x - totalCardsW - 16.0f;
+        const float originX = screenSize.x - totalCardsW - 16.0f * s;
         const float originY = (screenSize.y - totalOverlayH) * 0.5f;
 
-        ImGui::SetNextWindowPos(ImVec2(originX - 8.0f, originY - 8.0f), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(totalCardsW + 16.0f, totalOverlayH + 16.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(originX - 8.0f * s, originY - 8.0f * s), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(totalCardsW + 16.0f * s, totalOverlayH + 16.0f * s), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.0f);
 
         ImGuiWindowFlags winFlags = ImGuiWindowFlags_NoTitleBar |
@@ -60,13 +61,16 @@ namespace VolumeOverlay {
             float badgeY = originY;
 
             draw->AddRectFilled(ImVec2(badgeX, badgeY), ImVec2(badgeX + badgeW, badgeY + badgeH),
-                                IM_COL32(18, 22, 26, 235), 6.0f);
+                                IM_COL32(18, 22, 26, 235), 6.0f * s);
             draw->AddRect(ImVec2(badgeX, badgeY), ImVec2(badgeX + badgeW, badgeY + badgeH),
-                          IM_COL32(255, 255, 255, 35), 6.0f, 0, 1.2f);
+                          IM_COL32(255, 255, 255, 35), 6.0f * s, 0, 1.2f);
+
+            ImFont* font = ImGui::GetFont();
+            float baseFontSz = font->FontSize;
 
             const char* title = "BOOST";
-            ImVec2 titleSz = ImGui::CalcTextSize(title);
-            draw->AddText(ImVec2(badgeX + (badgeW - titleSz.x) * 0.5f, badgeY + (badgeH - titleSz.y) * 0.5f),
+            ImVec2 titleSz = font->CalcTextSizeA(baseFontSz, FLT_MAX, 0.0f, title);
+            draw->AddText(font, baseFontSz, ImVec2(badgeX + (badgeW - titleSz.x) * 0.5f, badgeY + (badgeH - titleSz.y) * 0.5f),
                           IM_COL32(70, 225, 215, 255), title);
 
             const char* labels[3] = { "BGM", "BTN", "SE" };
@@ -79,30 +83,29 @@ namespace VolumeOverlay {
 
             const float cardsBaseY = originY + badgeH + badgeGapY;
 
-            const float btnW = 26.0f;
-            const float btnH = 20.0f;
-            const float sliderW = 24.0f;
-            const float sliderH = 110.0f;
+            const float btnW = 26.0f * s;
+            const float btnH = 20.0f * s;
+            const float sliderW = 24.0f * s;
+            const float sliderH = 110.0f * s;
 
-            const float rowHeaderY  = cardsBaseY + 8.0f;
-            const float rowPercentY = cardsBaseY + 26.0f;
-            const float rowPlusY    = cardsBaseY + 46.0f;
-            const float rowSliderY  = cardsBaseY + 70.0f;
-            const float rowMinusY   = cardsBaseY + 184.0f;
+            const float rowHeaderY  = cardsBaseY + 8.0f * s;
+            const float rowPercentY = cardsBaseY + 26.0f * s;
+            const float rowPlusY    = cardsBaseY + 46.0f * s;
+            const float rowSliderY  = cardsBaseY + 70.0f * s;
+            const float rowMinusY   = cardsBaseY + 184.0f * s;
 
             for (int i = 0; i < 3; i++) {
                 float cX = originX + i * (cardW + cardGap);
                 float cY = cardsBaseY;
 
                 draw->AddRectFilled(ImVec2(cX, cY), ImVec2(cX + cardW, cY + cardH),
-                                    IM_COL32(18, 22, 26, 235), 8.0f);
+                                    IM_COL32(18, 22, 26, 235), 8.0f * s);
                 draw->AddRect(ImVec2(cX, cY), ImVec2(cX + cardW, cY + cardH),
-                              IM_COL32(255, 255, 255, 30), 8.0f, 0, 1.2f);
+                              IM_COL32(255, 255, 255, 30), 8.0f * s, 0, 1.2f);
 
                 int& totalBoost = *boostVals[i];
                 auto& ct = s_tiers[i];
 
-                // BGM limit is 100%, BTN and SE max is 500%
                 const int maxBoost = (i == 0) ? 100 : 500;
                 if (totalBoost > maxBoost) totalBoost = maxBoost;
 
@@ -112,7 +115,6 @@ namespace VolumeOverlay {
                     ct.initialized = true;
                 }
 
-                // For BGM (i == 0), tier is fixed to 0 (single 100% range)
                 if (i == 0) {
                     ct.tier = 0;
                 } else {
@@ -120,13 +122,13 @@ namespace VolumeOverlay {
                     while (totalBoost < ct.tier * 100 && ct.tier > 0) ct.tier--;
                 }
 
-                ImVec2 lblSz = ImGui::CalcTextSize(labels[i]);
+                ImVec2 lblSz = font->CalcTextSizeA(baseFontSz, FLT_MAX, 0.0f, labels[i]);
                 ImGui::SetCursorScreenPos(ImVec2(cX + (cardW - lblSz.x) * 0.5f, rowHeaderY));
                 ImGui::TextColored(colors[i], "%s", labels[i]);
 
                 char valText[16];
                 std::snprintf(valText, sizeof(valText), "+%d%%", totalBoost);
-                ImVec2 valSz = ImGui::CalcTextSize(valText);
+                ImVec2 valSz = font->CalcTextSizeA(baseFontSz * 0.9f, FLT_MAX, 0.0f, valText);
                 ImGui::SetCursorScreenPos(ImVec2(cX + (cardW - valSz.x) * 0.5f, rowPercentY));
                 ImGui::TextUnformatted(valText);
 
@@ -135,7 +137,7 @@ namespace VolumeOverlay {
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors[i]);
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
 
                 char btnPlusId[32];
                 std::snprintf(btnPlusId, sizeof(btnPlusId), "+##card_%s", labels[i]);
@@ -161,8 +163,8 @@ namespace VolumeOverlay {
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.12f, 0.16f, 0.90f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.17f, 0.22f, 0.90f));
                 ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.22f, 0.28f, 0.90f));
-                ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 6.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 6.0f * s);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f * s);
 
                 char sliderId[32];
                 std::snprintf(sliderId, sizeof(sliderId), "##slider_card_%s", labels[i]);
@@ -179,7 +181,7 @@ namespace VolumeOverlay {
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors[i]);
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
 
                 char btnMinusId[32];
                 std::snprintf(btnMinusId, sizeof(btnMinusId), "-##card_%s", labels[i]);

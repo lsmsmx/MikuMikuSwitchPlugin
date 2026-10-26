@@ -98,7 +98,7 @@ static void DrawRoundButtonPlus(ImDrawList* drawList, ImVec2 center, float radiu
     drawList->AddCircleFilled(center, radius, kDivaLightPink, 32);
     drawList->AddCircle(center, radius, kDivaPinkBorder, 32, 2.0f);
 
-    float plusHalf = 7.0f;
+    float plusHalf = radius * 0.5f;
     ImU32 textDarkCol = IM_COL32(35, 42, 48, 255);
     drawList->AddLine(ImVec2(center.x - plusHalf, center.y), ImVec2(center.x + plusHalf, center.y), textDarkCol, 3.0f);
     drawList->AddLine(ImVec2(center.x, center.y - plusHalf), ImVec2(center.x, center.y + plusHalf), textDarkCol, 3.0f);
@@ -108,7 +108,7 @@ static void DrawRoundButtonMinus(ImDrawList* drawList, ImVec2 center, float radi
     drawList->AddCircleFilled(center, radius, kDivaCyan, 32);
     drawList->AddCircle(center, radius, kDivaCyanBorder, 32, 2.0f);
 
-    float minusHalf = 7.0f;
+    float minusHalf = radius * 0.5f;
     ImU32 textDarkCol = IM_COL32(35, 42, 48, 255);
     drawList->AddLine(ImVec2(center.x - minusHalf, center.y), ImVec2(center.x + minusHalf, center.y), textDarkCol, 3.0f);
 }
@@ -123,8 +123,8 @@ static void DrawSwitchButtonX(ImDrawList* drawList, ImFont* font, ImVec2 center,
     drawList->AddText(font, fontSize, ImVec2(center.x - sz.x * 0.5f, center.y - sz.y * 0.5f), IM_COL32(220, 226, 232, 255), txt);
 }
 
-static void DrawStickIcon(ImDrawList* drawList, ImFont* font, ImVec2 pos, const char* txt, bool highlighted) {
-    float radius = 11.0f;
+static void DrawStickIcon(ImDrawList* drawList, ImFont* font, ImVec2 pos, const char* txt, bool highlighted, float s) {
+    float radius = 11.0f * s;
     ImVec2 center(pos.x + radius, pos.y + radius);
 
     ImU32 fillCol   = highlighted ? kDivaLightPink : IM_COL32(210, 216, 222, 245);
@@ -141,15 +141,15 @@ static void DrawStickIcon(ImDrawList* drawList, ImFont* font, ImVec2 pos, const 
     drawList->AddText(font, fontSize, txtPos, textDarkCol, txt);
 }
 
-static void DrawRandomizerConfirmHint(ImDrawList* drawList, ImFont* font) {
+static void DrawRandomizerConfirmHint(ImDrawList* drawList, ImFont* font, float s) {
     if (!s_isSongConfirmActive || IsInCustomize())
         return;
 
     ImGuiIO& io = ImGui::GetIO();
 
-    float minusX = 200.0f;
-    float minusY = 536.0f;
-    float radius = 14.0f;
+    float minusX = 200.0f * s;
+    float minusY = 536.0f * s;
+    float radius = 14.0f * s;
     ImVec2 minusCenter(minusX + radius, minusY + radius);
 
     float dist = std::hypot(io.MousePos.x - minusCenter.x, io.MousePos.y - minusCenter.y);
@@ -162,41 +162,42 @@ static void DrawRandomizerConfirmHint(ImDrawList* drawList, ImFont* font) {
     if (s_randomizerMenuOpen)
     {
         float menuX  = minusX;
-        float menuY  = minusY + (radius * 2.0f) + 6.0f;
-        float menuW  = 220.0f;
-        float rowH   = 30.0f;
+        float menuY  = minusY + (radius * 2.0f) + 6.0f * s;
+        float menuW  = 220.0f * s;
+        float rowH   = 30.0f * s;
         float totalH = rowH * 2.0f;
 
         ImVec2 pMin(menuX, menuY);
         ImVec2 pMax(menuX + menuW, menuY + totalH);
 
-        drawList->AddRectFilled(pMin, pMax, IM_COL32(18, 22, 28, 240), 8.0f);
-        drawList->AddRect(pMin, pMax, kDivaPinkBorder, 8.0f, 0, 1.5f);
-        drawList->AddLine(ImVec2(menuX + 8.0f, menuY + rowH), ImVec2(menuX + menuW - 8.0f, menuY + rowH), IM_COL32(255, 255, 255, 30), 1.0f);
+        drawList->AddRectFilled(pMin, pMax, IM_COL32(18, 22, 28, 240), 8.0f * s);
+        drawList->AddRect(pMin, pMax, kDivaPinkBorder, 8.0f * s, 0, 1.5f);
+        drawList->AddLine(ImVec2(menuX + 8.0f * s, menuY + rowH), ImVec2(menuX + menuW - 8.0f * s, menuY + rowH), IM_COL32(255, 255, 255, 30), 1.0f);
 
         float row1MidY = menuY + (rowH * 0.5f);
+        float baseFontSize = font->FontSize;
 
         const char* tRandomizer = "Randomizer";
-        ImVec2 tRandSz = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, tRandomizer);
-        drawList->AddText(font, font->FontSize, ImVec2(menuX + 12.0f, row1MidY - tRandSz.y * 0.5f), IM_COL32(240, 244, 248, 255), tRandomizer);
+        ImVec2 tRandSz = font->CalcTextSizeA(baseFontSize, FLT_MAX, 0.0f, tRandomizer);
+        drawList->AddText(font, baseFontSize, ImVec2(menuX + 12.0f * s, row1MidY - tRandSz.y * 0.5f), IM_COL32(240, 244, 248, 255), tRandomizer);
 
         auto mode = ChartRandomizer::GetMode();
         const char* modeTxt = (mode == ChartRandomizer::Mode_Off) ? "OFF" : (mode == ChartRandomizer::Mode_Partial ? "PARTIAL" : "FULL");
         ImU32 modeCol = (mode == ChartRandomizer::Mode_Off) ? IM_COL32(160, 170, 180, 220) : (mode == ChartRandomizer::Mode_Partial ? kDivaCyan : kDivaLightPink);
 
-        ImVec2 modeSz = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, modeTxt);
+        ImVec2 modeSz = font->CalcTextSizeA(baseFontSize, FLT_MAX, 0.0f, modeTxt);
 
-        float rightCenter1 = menuX + menuW - 58.0f;
-        float btnRad = 9.5f;
+        float rightCenter1 = menuX + menuW - (58.0f * s);
+        float btnRad = 9.5f * s;
 
-        ImVec2 btnX1(rightCenter1 - modeSz.x * 0.5f - 15.0f, row1MidY);
-        ImVec2 btnX2(rightCenter1 + modeSz.x * 0.5f + 15.0f, row1MidY);
+        ImVec2 btnX1(rightCenter1 - modeSz.x * 0.5f - 15.0f * s, row1MidY);
+        ImVec2 btnX2(rightCenter1 + modeSz.x * 0.5f + 15.0f * s, row1MidY);
 
         DrawSwitchButtonX(drawList, font, btnX1, btnRad);
-        drawList->AddText(font, font->FontSize, ImVec2(rightCenter1 - modeSz.x * 0.5f, row1MidY - modeSz.y * 0.5f), modeCol, modeTxt);
+        drawList->AddText(font, baseFontSize, ImVec2(rightCenter1 - modeSz.x * 0.5f, row1MidY - modeSz.y * 0.5f), modeCol, modeTxt);
         DrawSwitchButtonX(drawList, font, btnX2, btnRad);
 
-        if (io.MousePos.x >= rightCenter1 - 65.0f && io.MousePos.x <= menuX + menuW &&
+        if (io.MousePos.x >= rightCenter1 - 65.0f * s && io.MousePos.x <= menuX + menuW &&
             io.MousePos.y >= menuY && io.MousePos.y <= menuY + rowH && ImGui::IsMouseClicked(0)) {
             ChartRandomizer::CycleMode();
         }
@@ -204,149 +205,165 @@ static void DrawRandomizerConfirmHint(ImDrawList* drawList, ImFont* font) {
         float row2MidY = menuY + rowH + (rowH * 0.5f);
 
         const char* tChance = "Random chance";
-        ImVec2 tChanceSz = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, tChance);
-        drawList->AddText(font, font->FontSize, ImVec2(menuX + 12.0f, row2MidY - tChanceSz.y * 0.5f), IM_COL32(240, 244, 248, 255), tChance);
+        ImVec2 tChanceSz = font->CalcTextSizeA(baseFontSize, FLT_MAX, 0.0f, tChance);
+        drawList->AddText(font, baseFontSize, ImVec2(menuX + 12.0f * s, row2MidY - tChanceSz.y * 0.5f), IM_COL32(240, 244, 248, 255), tChance);
 
-        float marginRight = 12.0f;
-        ImVec2 btnTriggerSize(26.0f, 17.0f);
+        float marginRight = 12.0f * s;
+        ImVec2 btnTriggerSize(26.0f * s, 17.0f * s);
 
         float zrX = menuX + menuW - btnTriggerSize.x - marginRight;
         float zrY = row2MidY - btnTriggerSize.y * 0.5f;
 
         char pctBuf[16];
         snprintf(pctBuf, sizeof(pctBuf), "%d%%", ChartRandomizer::GetChance());
-        ImVec2 pctSz = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, pctBuf);
-        float pctX = zrX - 8.0f - pctSz.x;
+        ImVec2 pctSz = font->CalcTextSizeA(baseFontSize, FLT_MAX, 0.0f, pctBuf);
+        float pctX = zrX - 8.0f * s - pctSz.x;
         float pctY = row2MidY - pctSz.y * 0.5f;
 
-        float zlX = pctX - 8.0f - btnTriggerSize.x;
+        float zlX = pctX - 8.0f * s - btnTriggerSize.x;
         float zlY = row2MidY - btnTriggerSize.y * 0.5f;
 
         DrawSwitchTriggerZL(drawList, font, ImVec2(zlX, zlY), btnTriggerSize, false);
-        drawList->AddText(font, font->FontSize, ImVec2(pctX, pctY), IM_COL32(255, 255, 255, 255), pctBuf);
+        drawList->AddText(font, baseFontSize, ImVec2(pctX, pctY), IM_COL32(255, 255, 255, 255), pctBuf);
         DrawSwitchTriggerZR(drawList, font, ImVec2(zrX, zrY), btnTriggerSize, false);
 
-        if (io.MousePos.x >= zlX - 3.0f && io.MousePos.x <= zlX + btnTriggerSize.x + 3.0f &&
-            io.MousePos.y >= zlY - 3.0f && io.MousePos.y <= zlY + btnTriggerSize.y + 3.0f && ImGui::IsMouseClicked(0)) {
+        if (io.MousePos.x >= zlX - 3.0f * s && io.MousePos.x <= zlX + btnTriggerSize.x + 3.0f * s &&
+            io.MousePos.y >= zlY - 3.0f * s && io.MousePos.y <= zlY + btnTriggerSize.y + 3.0f * s && ImGui::IsMouseClicked(0)) {
             ChartRandomizer::AdjustChance(-5);
         }
-        if (io.MousePos.x >= zrX - 3.0f && io.MousePos.x <= zrX + btnTriggerSize.x + 3.0f &&
-            io.MousePos.y >= zrY - 3.0f && io.MousePos.y <= zrY + btnTriggerSize.y + 3.0f && ImGui::IsMouseClicked(0)) {
+        if (io.MousePos.x >= zrX - 3.0f * s && io.MousePos.x <= zrX + btnTriggerSize.x + 3.0f * s &&
+            io.MousePos.y >= zrY - 3.0f * s && io.MousePos.y <= zrY + btnTriggerSize.y + 3.0f * s && ImGui::IsMouseClicked(0)) {
             ChartRandomizer::AdjustChance(5);
         }
     }
 }
 
-static void DrawMainMenuHelpHint(ImDrawList* drawList, ImFont* font) {
+static void DrawMainMenuHelpHint(ImDrawList* drawList, ImFont* font, float s) {
     if (!PluginHelpUi::IsMainMenuActive() || PluginHelpUi::IsOpen())
         return;
 
-    float startX = 90.0f, startY = 682.0f, btnRadius = 14.0f;
-    ImVec2 btnCenter(startX + btnRadius, startY + 13.0f);
+    ImGuiIO& io = ImGui::GetIO();
+    float startX = 90.0f * s;
+    float startY = io.DisplaySize.y - (38.0f * s);
+    float btnRadius = 14.0f * s;
+    ImVec2 btnCenter(startX + btnRadius, startY + 13.0f * s);
     DrawRoundButtonPlus(drawList, btnCenter, btnRadius);
 
     const char* text = "MikuMikuSwitchPlugin Help";
     float fontSize = font->FontSize * 2.3f;
     ImVec2 txtSz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-    ImVec2 textPos(startX + (btnRadius * 2.0f) + 12.0f, startY + (26.0f - txtSz.y) * 0.5f);
+    ImVec2 textPos(startX + (btnRadius * 2.0f) + 12.0f * s, startY + (26.0f * s - txtSz.y) * 0.5f);
 
     drawList->AddText(font, fontSize, ImVec2(textPos.x + 1.2f, textPos.y + 1.2f), IM_COL32(0, 0, 0, 160), text);
     drawList->AddText(font, fontSize, textPos, kDivaLightPink, text);
 }
 
-static void DrawCustomizeHint(ImDrawList* drawList, ImFont* font) {
+static void DrawCustomizeHint(ImDrawList* drawList, ImFont* font, float s) {
     if (s_topMenuLifeTicks <= 0 || CustomizeSelUi::IsOpen())
         return;
 
-    float startX = 90.0f, startY = 682.0f;
-    ImVec2 btnSize(44.0f, 26.0f);
+    ImGuiIO& io = ImGui::GetIO();
+    float startX = 90.0f * s;
+    float startY = io.DisplaySize.y - (38.0f * s);
+    ImVec2 btnSize(44.0f * s, 26.0f * s);
     DrawSwitchTriggerZL(drawList, font, ImVec2(startX, startY), btnSize, true);
 
     const char* text = "NC OPTIONS";
     float fontSize = font->FontSize * 1.75f;
     ImVec2 txtSz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-    ImVec2 textPos(startX + btnSize.x + 12.0f, startY + (btnSize.y - txtSz.y) * 0.5f);
+    ImVec2 textPos(startX + btnSize.x + 12.0f * s, startY + (btnSize.y - txtSz.y) * 0.5f);
 
     drawList->AddText(font, fontSize, textPos, kDivaLightPink, text);
 }
 
-static void DrawAutoPlayBadge(ImDrawList* drawList, ImFont* font) {
+static void DrawAutoPlayBadge(ImDrawList* drawList, ImFont* font, float s) {
     if (!s_isPvSelActive || IsInCustomize())
         return;
 
-    float w = 122.0f, h = 50.0f, posX = 1280.0f - w - 24.0f, posY = 64.0f;
-    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), IM_COL32(18, 22, 26, 230), 10.0f);
-    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), IM_COL32(255, 255, 255, 35), 10.0f, 0, 1.2f);
+    ImGuiIO& io = ImGui::GetIO();
+    float w = 122.0f * s, h = 50.0f * s;
+    float posX = io.DisplaySize.x - w - (24.0f * s);
+    float posY = 64.0f * s;
 
-    ImVec2 zrSize(28.0f, 15.0f);
-    DrawSwitchTriggerZR(drawList, font, ImVec2(posX + w - 12.0f - zrSize.x, posY + 6.0f), zrSize, false);
+    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), IM_COL32(18, 22, 26, 230), 10.0f * s);
+    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), IM_COL32(255, 255, 255, 35), 10.0f * s, 0, 1.2f);
 
+    ImVec2 zrSize(28.0f * s, 15.0f * s);
+    DrawSwitchTriggerZR(drawList, font, ImVec2(posX + w - 12.0f * s - zrSize.x, posY + 6.0f * s), zrSize, false);
+
+    float baseFontSz = font->FontSize;
     const char* title = "AUTOPLAY";
-    ImVec2 titleSz = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, title);
-    drawList->AddText(font, font->FontSize, ImVec2(posX + 14.0f, posY + 6.0f + (zrSize.y - titleSz.y) * 0.5f), IM_COL32(255, 255, 255, 255), title);
+    ImVec2 titleSz = font->CalcTextSizeA(baseFontSz, FLT_MAX, 0.0f, title);
+    drawList->AddText(font, baseFontSz, ImVec2(posX + 14.0f * s, posY + 6.0f * s + (zrSize.y - titleSz.y) * 0.5f), IM_COL32(255, 255, 255, 255), title);
 
-    float capW = w - 24.0f, capH = 19.0f;
-    ImVec2 capMin(posX + 12.0f, posY + 25.0f), capMax(capMin.x + capW, capMin.y + capH);
+    float capW = w - 24.0f * s, capH = 19.0f * s;
+    ImVec2 capMin(posX + 12.0f * s, posY + 25.0f * s), capMax(capMin.x + capW, capMin.y + capH);
     ImU32 stateColor = AutoPlay::g_enabled ? IM_COL32(18, 205, 205, 255) : IM_COL32(165, 175, 185, 255);
     ImU32 stateBg    = AutoPlay::g_enabled ? IM_COL32(18, 205, 205, 40)  : IM_COL32(165, 175, 185, 40);
 
-    drawList->AddRectFilled(capMin, capMax, stateBg, 9.5f);
-    drawList->AddRect(capMin, capMax, AutoPlay::g_enabled ? IM_COL32(18, 205, 205, 140) : IM_COL32(165, 175, 185, 140), 9.5f, 0, 1.2f);
+    drawList->AddRectFilled(capMin, capMax, stateBg, 9.5f * s);
+    drawList->AddRect(capMin, capMax, AutoPlay::g_enabled ? IM_COL32(18, 205, 205, 140) : IM_COL32(165, 175, 185, 140), 9.5f * s, 0, 1.2f);
 
-    float labelFontSize = font->FontSize;
     const char* label = AutoPlay::g_enabled ? "ON" : "OFF";
-    ImVec2 lblSz = font->CalcTextSizeA(labelFontSize, FLT_MAX, 0.0f, label);
-    drawList->AddText(font, labelFontSize, ImVec2(capMin.x + (capW - lblSz.x) * 0.5f, capMin.y + (capH - lblSz.y) * 0.5f - 0.5f), stateColor, label);
+    ImVec2 lblSz = font->CalcTextSizeA(baseFontSz, FLT_MAX, 0.0f, label);
+    drawList->AddText(font, baseFontSz, ImVec2(capMin.x + (capW - lblSz.x) * 0.5f, capMin.y + (capH - lblSz.y) * 0.5f - 0.5f), stateColor, label);
 }
 
-static void Draw2DModeBadge(ImDrawList* drawList, ImFont* font) {
+static void Draw2DModeBadge(ImDrawList* drawList, ImFont* font, float s) {
     if (!s_isPvSelActive || IsInCustomize())
         return;
 
-    float w = 160.0f, h = 34.0f, posX = 10.0f, posY = 682.0f;
+    ImGuiIO& io = ImGui::GetIO();
+    float w = 160.0f * s, h = 34.0f * s;
+    float posX = 10.0f * s;
+    float posY = io.DisplaySize.y - h - (4.0f * s);
+
     ImU32 bgCol     = g_force2D ? IM_COL32(38, 16, 30, 235)    : IM_COL32(18, 22, 26, 205);
     ImU32 borderCol = g_force2D ? kDivaLightPink               : IM_COL32(255, 255, 255, 30);
     ImU32 textCol   = g_force2D ? IM_COL32(255, 255, 255, 255) : IM_COL32(165, 175, 185, 215);
 
-    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), bgCol, 7.0f);
-    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), borderCol, 7.0f, 0, g_force2D ? 1.6f : 1.0f);
+    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), bgCol, 7.0f * s);
+    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), borderCol, 7.0f * s, 0, g_force2D ? 1.6f : 1.0f);
 
     const char* label = "2D MODE";
     float labelFontSize = font->FontSize;
     ImVec2 lblSz = font->CalcTextSizeA(labelFontSize, FLT_MAX, 0.0f, label);
-    float textStartX = posX + 12.0f;
-    drawList->AddText(font, font->FontSize, ImVec2(textStartX, posY + (h - lblSz.y) * 0.5f), textCol, label);
+    float textStartX = posX + 12.0f * s;
+    drawList->AddText(font, labelFontSize, ImVec2(textStartX, posY + (h - lblSz.y) * 0.5f), textCol, label);
 
-    float btnX = textStartX + lblSz.x + 10.0f;
-    DrawStickIcon(drawList, font, ImVec2(btnX, posY + (h - 22.0f) * 0.5f), "L3", g_force2D);
-    btnX += 28.0f;
-    drawList->AddText(font, font->FontSize, ImVec2(btnX, posY + (h - lblSz.y) * 0.5f), textCol, "+");
-    btnX += 14.0f;
-    DrawSwitchTriggerZR(drawList, font, ImVec2(btnX, posY + (h - 18.0f) * 0.5f), ImVec2(28.0f, 18.0f), g_force2D);
+    float btnX = textStartX + lblSz.x + 10.0f * s;
+    DrawStickIcon(drawList, font, ImVec2(btnX, posY + (h - 22.0f * s) * 0.5f), "L3", g_force2D, s);
+    btnX += 28.0f * s;
+    drawList->AddText(font, labelFontSize, ImVec2(btnX, posY + (h - lblSz.y) * 0.5f), textCol, "+");
+    btnX += 14.0f * s;
+    DrawSwitchTriggerZR(drawList, font, ImVec2(btnX, posY + (h - 18.0f * s) * 0.5f), ImVec2(28.0f * s, 18.0f * s), g_force2D);
 }
 
-static void DrawNoMovieBadge(ImDrawList* drawList, ImFont* font) {
+static void DrawNoMovieBadge(ImDrawList* drawList, ImFont* font, float s) {
     if (!s_isPvSelActive || IsInCustomize())
         return;
 
-    float w = 124.0f, h = 34.0f, posX = 676.0f, posY = 573.0f;
+    float w = 124.0f * s, h = 34.0f * s;
+    float posX = 676.0f * s;
+    float posY = 573.0f * s;
+
     ImU32 bgCol     = g_noMovie ? IM_COL32(38, 16, 30, 235)    : IM_COL32(18, 22, 26, 205);
     ImU32 borderCol = g_noMovie ? kDivaLightPink               : IM_COL32(255, 255, 255, 30);
     ImU32 textCol   = g_noMovie ? IM_COL32(255, 255, 255, 255) : IM_COL32(165, 175, 185, 215);
 
-    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), bgCol, 7.0f);
-    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), borderCol, 7.0f, 0, g_noMovie ? 1.6f : 1.0f);
+    drawList->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + w, posY + h), bgCol, 7.0f * s);
+    drawList->AddRect(ImVec2(posX, posY), ImVec2(posX + w, posY + h), borderCol, 7.0f * s, 0, g_noMovie ? 1.6f : 1.0f);
 
     const char* label = "NO MOVIE";
     float labelFontSize = font->FontSize;
     ImVec2 lblSz = font->CalcTextSizeA(labelFontSize, FLT_MAX, 0.0f, label);
-    float textStartX = posX + 8.0f;
-    drawList->AddText(font, font->FontSize, ImVec2(textStartX, posY + (h - lblSz.y) * 0.5f), textCol, label);
+    float textStartX = posX + 8.0f * s;
+    drawList->AddText(font, labelFontSize, ImVec2(textStartX, posY + (h - lblSz.y) * 0.5f), textCol, label);
 
-    float btnX = textStartX + lblSz.x + 5.0f;
-    DrawSwitchTriggerZR(drawList, font, ImVec2(btnX, posY + (h - 18.0f) * 0.5f), ImVec2(28.0f, 18.0f), g_noMovie);
-    btnX += 32.0f;
-    drawList->AddText(font, font->FontSize, ImVec2(btnX, posY + (h - lblSz.y) * 0.5f + 1.0f), g_noMovie ? kDivaLightPink : IM_COL32(175, 185, 195, 200), "x2");
+    float btnX = textStartX + lblSz.x + 5.0f * s;
+    DrawSwitchTriggerZR(drawList, font, ImVec2(btnX, posY + (h - 18.0f * s) * 0.5f), ImVec2(28.0f * s, 18.0f * s), g_noMovie);
+    btnX += 32.0f * s;
+    drawList->AddText(font, labelFontSize, ImVec2(btnX, posY + (h - lblSz.y) * 0.5f + 1.0f * s), g_noMovie ? kDivaLightPink : IM_COL32(175, 185, 195, 200), "x2");
 }
 
 bool IsVisible() {
@@ -385,7 +402,6 @@ void ProcessInput() {
     uint64_t pressed = hid_buttons & ~s_prev_buttons;
     s_prev_buttons = hid_buttons;
 
-    // Main menu (Plus button)
     if (PluginHelpUi::IsMainMenuActive()) {
         if (pressed & nn::hid::Button::Plus) {
             PluginHelpUi::Toggle();
@@ -393,7 +409,6 @@ void ProcessInput() {
         return;
     }
 
-    // Song confirmation screen (State 8): Randomizer controls
     if (s_isSongConfirmActive && !IsInCustomize()) {
         if (pressed & nn::hid::Button::Minus) {
             s_randomizerMenuOpen = !s_randomizerMenuOpen;
@@ -401,12 +416,10 @@ void ProcessInput() {
         }
 
         if (s_randomizerMenuOpen) {
-            // Toggle OFF / PARTIAL / FULL mode
             if (pressed & nn::hid::Button::X) {
                 ChartRandomizer::CycleMode();
                 sound::PlaySelectSE();
             }
-            // Adjust randomizer chance percentage
             if (pressed & nn::hid::Button::ZL) {
                 ChartRandomizer::AdjustChance(-5);
                 sound::PlaySelectSE();
@@ -419,12 +432,11 @@ void ProcessInput() {
         return;
     }
 
-    // Song selection menu
     if (!s_isPvSelActive || IsInCustomize())
         return;
 
-    constexpr uint64_t kStickLMask = (1ULL << 4); // L3
-    constexpr uint64_t kZRMask     = (1ULL << 9); // ZR
+    constexpr uint64_t kStickLMask = (1ULL << 4);
+    constexpr uint64_t kZRMask     = (1ULL << 9);
 
     bool zr_down = (hid_buttons & kZRMask) != 0;
     bool l3_down = (hid_buttons & kStickLMask) != 0;
@@ -489,17 +501,19 @@ void Draw() {
         return;
     }
 
+    float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
     ImDrawList* drawList = ImGui::GetBackgroundDrawList();
     drawList->PushClipRectFullScreen();
 
     ImFont* font = ImGui::GetFont();
 
-    DrawMainMenuHelpHint(drawList, font);
-    DrawCustomizeHint(drawList, font);
-    DrawAutoPlayBadge(drawList, font);
-    Draw2DModeBadge(drawList, font);
-    DrawNoMovieBadge(drawList, font);
-    DrawRandomizerConfirmHint(drawList, font);
+    DrawMainMenuHelpHint(drawList, font, s);
+    DrawCustomizeHint(drawList, font, s);
+    DrawAutoPlayBadge(drawList, font, s);
+    Draw2DModeBadge(drawList, font, s);
+    DrawNoMovieBadge(drawList, font, s);
+    DrawRandomizerConfirmHint(drawList, font, s);
 
     drawList->PopClipRect();
 

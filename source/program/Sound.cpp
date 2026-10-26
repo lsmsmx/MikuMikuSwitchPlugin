@@ -33,7 +33,6 @@ typedef void (*SetVoicePlayStateFn)(void* voice, int playState);
 static SetVoicePlayStateFn s_SetVoicePlayState = nullptr;
 
 static void*    s_sustainVoices[16] = {};
-static bool     s_slotActive[16]    = {};
 static int      s_pendingSlot       = -1;
 static uint64_t s_officialLoopStart = 0;
 static uint64_t s_officialLoopEnd   = 0;
@@ -65,20 +64,12 @@ inline int GetSustainSlot(std::string_view name) {
 // =========================================================================
 
 void StopSlot(int slot) {
-    if (slot >= 0 && slot < 16) {
-        s_slotActive[slot] = false;
+    if (slot >= 0 && slot < 16 && s_sustainVoices[slot]) {
+        void* voice = s_sustainVoices[slot];
+        s_sustainVoices[slot] = nullptr;
 
-        if (s_pendingSlot == slot) {
-            s_pendingSlot = -1;
-        }
-
-        if (s_sustainVoices[slot]) {
-            void* voice = s_sustainVoices[slot];
-            s_sustainVoices[slot] = nullptr;
-
-            if (s_SetVoicePlayState) {
-                s_SetVoicePlayState(voice, PlayState_Stopped);
-            }
+        if (s_SetVoicePlayState) {
+            s_SetVoicePlayState(voice, PlayState_Stopped);
         }
     }
 }
@@ -118,33 +109,35 @@ HOOK_DEFINE_TRAMPOLINE(SoundCueLoadHook) {
             return ret;
         }
 
-        if (queue_index != 4) {
-            return ret;
-        }
-
         int slot = GetSustainSlot(name);
         if (slot >= 0) {
             if (name.find("_off") != std::string_view::npos) {
                 StopSlot(slot);
+                if (s_pendingSlot == slot) {
+                    s_pendingSlot = -1;
+                }
                 return ret;
             }
 
-            uintptr_t prop = *reinterpret_cast<uintptr_t*>((uintptr_t)cue + 0x68);
-            if (prop) {
-                s_officialLoopStart = *reinterpret_cast<uint64_t*>(prop + 0x10);
-                s_officialLoopEnd   = *reinterpret_cast<uint64_t*>(prop + 0x18);
-            } else {
-                s_officialLoopStart = 0;
-                s_officialLoopEnd   = 0;
-            }
+            bool isSustainQueue = (queue_index == 4);
 
-            if (slot == 6 && (s_officialLoopEnd <= s_officialLoopStart || s_officialLoopStart == 0)) {
-                s_officialLoopStart = 123206;
-                s_officialLoopEnd   = 125305;
-            }
+            if (isSustainQueue && (name.find("_on") != std::string_view::npos || slot >= 6)) {
+                uintptr_t prop = *reinterpret_cast<uintptr_t*>((uintptr_t)cue + 0x68);
+                if (prop) {
+                    s_officialLoopStart = *reinterpret_cast<uint64_t*>(prop + 0x10);
+                    s_officialLoopEnd   = *reinterpret_cast<uint64_t*>(prop + 0x18);
+                } else {
+                    s_officialLoopStart = 0;
+                    s_officialLoopEnd   = 0;
+                }
 
-            s_slotActive[slot] = true;
-            s_pendingSlot = slot;
+                if (slot == 6 && (s_officialLoopEnd <= s_officialLoopStart || s_officialLoopStart == 0)) {
+                    s_officialLoopStart = 123206;
+                    s_officialLoopEnd   = 125305;
+                }
+
+                s_pendingSlot = slot;
+            }
         }
         return ret;
     }
@@ -161,27 +154,14 @@ HOOK_DEFINE_TRAMPOLINE(AppendWaveBufferHook) {
             int slot = s_pendingSlot;
             s_pendingSlot = -1;
 
-            if (!s_slotActive[slot]) {
-                Orig(voice, waveBuffer);
-                return;
-            }
-
             if (s_sustainVoices[slot]) {
                 StopSlot(slot);
-                s_slotActive[slot] = true;
             }
 
             auto* wb = const_cast<WaveBuffer*>(waveBuffer);
 
             int32_t loopStart = static_cast<int32_t>(s_officialLoopStart);
             int32_t loopEnd   = static_cast<int32_t>(s_officialLoopEnd);
-
-            if (loopEnd <= 0 || loopEnd > waveBuffer->endSampleOffset) {
-                loopEnd = waveBuffer->endSampleOffset;
-            }
-            if (loopStart >= loopEnd || loopStart < 0) {
-                loopStart = 0;
-            }
 
             wb->startSampleOffset = loopStart;
             wb->endSampleOffset   = loopEnd;

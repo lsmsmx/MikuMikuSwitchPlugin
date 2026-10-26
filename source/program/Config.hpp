@@ -38,9 +38,11 @@ struct Config {
     static bool no3D;
     static bool noMV;
     static bool backMV;
+    static bool enableTaa;
     static std::string antiAliasing;
     static std::string magFilterMode;
     static std::string ssaaMode;
+    static std::string gameRes;
 
     // Core Graphics Values
     static float exposure;

@@ -17,16 +17,17 @@ void SetVisible(bool state) { g_overlayMode = state ? Mode_Gamepad : Mode_Disabl
 // =========================================================
 // Full-Screen Touch to Mini-Zone Circle Projection
 // =========================================================
-static void DrawProjectedTouchSwipes(ImDrawList* draw) {
+static void DrawProjectedTouchSwipes(ImDrawList* draw, float s) {
     if (!nn::hid::GetTouchScreenState) return;
 
-    // Mini-zone at bottom-center: 1280/3 x 720/3 (426.66px x 240.0px)
-    const float zoneW = 1280.0f / 3.0f;
-    const float zoneH = 720.0f / 3.0f;
-    const float zoneX = (1280.0f - zoneW) * 0.5f;
-    const float zoneY = 720.0f - zoneH;
+    ImVec2 screenSize = ImGui::GetIO().DisplaySize;
 
-    // Map full-screen coordinates (0..1280, 0..720) down into the bottom-center 1/3 window
+    const float zoneW = screenSize.x / 3.0f;
+    const float zoneH = screenSize.y / 3.0f;
+    const float zoneX = (screenSize.x - zoneW) * 0.5f;
+    const float zoneY = screenSize.y - zoneH;
+
+    // Switch touch screen hardware reports in 0..1280 and 0..720 range
     auto ProjectToMiniZone = [&](float sx, float sy) -> ImVec2 {
         float px = zoneX + (sx / 1280.0f) * zoneW;
         float py = zoneY + (sy / 720.0f) * zoneH;
@@ -36,21 +37,14 @@ static void DrawProjectedTouchSwipes(ImDrawList* draw) {
     nn::hid::TouchScreenState ts = {};
     nn::hid::GetTouchScreenState(&ts);
 
-    // Exact 12px radius requested
-    const float circleRadius = 12.0f;
-
-    // Miku Teal (#47DFD3) outline from ImGui theme
+    const float circleRadius = 12.0f * s;
     const ImU32 mikuBorderCol = IM_COL32(71, 223, 211, 220);
     const ImU32 fillCol       = IM_COL32(245, 248, 250, 140);
 
     for (int i = 0; i < ts.count; i++) {
         ImVec2 mappedPos = ProjectToMiniZone((float)ts.touches[i].x, (float)ts.touches[i].y);
-
-        // Soft translucent white/light-gray core
         draw->AddCircleFilled(mappedPos, circleRadius, fillCol);
-
-        // Signature Miku Teal border (#47DFD3)
-        draw->AddCircle(mappedPos, circleRadius, mikuBorderCol, 0, 2.0f);
+        draw->AddCircle(mappedPos, circleRadius, mikuBorderCol, 0, 2.0f * s);
     }
 }
 
@@ -65,10 +59,12 @@ void DrawGamepad() {
                                     ImGuiWindowFlags_NoNav |
                                     ImGuiWindowFlags_NoInputs;
 
-    float SCALE = 1.2f;
+    ImVec2 screenSize = ImGui::GetIO().DisplaySize;
+    float sFactor = screenSize.y / 720.0f;
+
+    float SCALE = 1.2f * sFactor;
     auto s = [&](float v) { return v * SCALE; };
 
-    ImVec2 screenSize = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos(ImVec2(screenSize.x * 0.5f, screenSize.y), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 
     if (ImGui::Begin("GamepadOverlay", nullptr, overlayFlags)) {
@@ -79,7 +75,6 @@ void DrawGamepad() {
         nn::hid::NpadHandheldState npad = nn::hid::GetMergedNpadState();
         uint64_t btns = npad.buttons;
 
-        // Detect if touch emulation is actively occurring per side
         bool isTouchActiveL = false;
         bool isTouchActiveR = false;
 
@@ -95,7 +90,6 @@ void DrawGamepad() {
             }
         }
 
-        // Color palette
         ImU32 alphaGlo  = 225;
         ImU32 alphaBtn  = 220;
         ImU32 alphaLogo = 150;
@@ -112,7 +106,6 @@ void DrawGamepad() {
         ImU32 colBlue  = IM_COL32(140, 180, 255, alphaBtn);
         ImU32 colPink  = IM_COL32(240, 100, 200, alphaBtn);
 
-        // Shell coordinates
         float jcW     = s(44.0f);
         float centerW = s(58.0f);
         float gripW   = centerW / 2.0f;
@@ -130,7 +123,6 @@ void DrawGamepad() {
 
         ImGui::Dummy(ImVec2(s(280.0f), (leftBottomGroupY + s(15.0f)) - pos.y));
 
-        // ZL / ZR Triggers
         float zc = s(2.5f);
         draw->PathClear();
         draw->PathArcTo(ImVec2(leftX + s(7.0f), topY - s(13.0f)), zc, IM_PI, IM_PI * 1.5f, 5);
@@ -146,7 +138,6 @@ void DrawGamepad() {
         draw->PathArcTo(ImVec2(cx + gripW + s(13.0f), topY - s(7.0f)), zc, IM_PI * 0.5f, IM_PI, 5);
         draw->PathFillConvex((btns & nn::hid::Button::ZR) ? colBtnPrs : colBtnBase);
 
-        // L / R Bumpers
         float bThick = s(3.5f);
         float flushOff = bThick / 2.0f;
         draw->PathClear();
@@ -159,14 +150,12 @@ void DrawGamepad() {
         draw->PathArcTo(ImVec2(rightX + jcW - jcRad, topY + jcRad), jcRad + flushOff, IM_PI * 1.5f, IM_PI * 1.8f, 15);
         draw->PathStroke((btns & nn::hid::Button::R) ? colBtnPrs : colBtnBase, 0, bThick);
 
-        // Main Body Shells
         draw->AddRectFilled(ImVec2(cx - gripW, topY), ImVec2(cx + gripW, bodyBottomY), colMiddle);
         draw->AddRectFilled(ImVec2(leftX, topY), ImVec2(cx - gripW, bodyBottomY), colLeft, jcRad, ImDrawFlags_RoundCornersTopLeft);
         draw->AddRectFilled(ImVec2(rightX, topY), ImVec2(rightX + jcW, bodyBottomY), colRight, jcRad, ImDrawFlags_RoundCornersTopRight);
         draw->AddLine(ImVec2(cx - gripW, topY), ImVec2(cx - gripW, bodyBottomY), IM_COL32(0,0,0, 130), s(2.0f));
         draw->AddLine(ImVec2(rightX, topY), ImVec2(rightX, bodyBottomY), IM_COL32(0,0,0, 130), s(2.0f));
 
-        // Switch Logo
         float ly = topY + s(38.0f);
         float lw = s(11.0f);
         float lh = s(12.0f);
@@ -202,7 +191,6 @@ void DrawGamepad() {
         draw->AddCircleFilled(ImVec2(dotLeftX, ly - dotOffsetY), dotRad, colLogo);
         draw->AddCircleFilled(ImVec2(dotRightX, ly + dotOffsetY), dotRad, IM_COL32(0, 0, 0, alphaGlo));
 
-        // Player Indicator LEDs
         ImU32 ledOn = IM_COL32(50, 255, 50, alphaGlo);
         ImU32 ledOff = IM_COL32(20, 50, 20, 130);
         float indRad = s(1.2f), indGap = s(3.5f), startIndY = ly - (indGap * 1.5f);
@@ -211,7 +199,6 @@ void DrawGamepad() {
             draw->AddCircleFilled(ImVec2(cx + gripW - s(6.0f), startIndY + i*indGap), indRad, (i == 0) ? ledOn : ledOff);
         }
 
-        // Nintendo Switch Text Glyphs
         auto DrawBlockChar = [&](char c, float x, float y, float w, float hc, float t) {
             float m = w * 0.35f;
             draw->PathClear();
@@ -251,7 +238,6 @@ void DrawGamepad() {
         DrawWord("NINTENDO", cx - s(20.0f), cx + s(20.0f), ly + s(17.0f), s(3.5f), s(1.0f));
         DrawWord("SWITCH", cx - s(20.0f), cx + s(20.0f), ly + s(23.0f), s(7.0f), s(1.8f));
 
-        // D-Pad and Buttons
         auto DrawSwitchDPad = [&](ImVec2 c, float offset, int dir, uint64_t mask) {
             bool pressed = (btns & mask) != 0;
             ImVec2 btnC = (dir==0)?ImVec2(c.x,c.y-offset):(dir==1)?ImVec2(c.x,c.y+offset):(dir==2)?ImVec2(c.x-offset,c.y):ImVec2(c.x+offset,c.y);
@@ -284,7 +270,6 @@ void DrawGamepad() {
         DrawPSBtn(ImVec2(rcx - s(12.5f), rightTopGroupY), nn::hid::Button::Y, 2, colPink);
         DrawPSBtn(ImVec2(rcx + s(12.5f), rightTopGroupY), nn::hid::Button::A, 1, colRed);
 
-        // Analog Sticks: ignore touch slider injection so sticks only move on real physical stick input
         auto DrawStick = [&](float sx, float sy, int32_t stickX, int32_t stickY, uint64_t clickMask) {
             float nx = (float)stickX/32768.0f, ny = -(float)stickY/32768.0f;
             float d = std::sqrt(nx*nx+ny*ny); if(d>1.0f){nx/=d;ny/=d;}
@@ -302,7 +287,6 @@ void DrawGamepad() {
         DrawStick(lcx, leftTopGroupY, stickLX, stickLY, nn::hid::Button::LStick);
         DrawStick(rcx, rightBottomGroupY, stickRX, stickRY, nn::hid::Button::RStick);
 
-        // +/- System Buttons
         float pmCenterY = topY + s(7.0f);
         float pmHalfLen = s(4.5f);
         float pmHalfThick = s(1.25f);
@@ -341,8 +325,7 @@ void DrawGamepad() {
 
         draw->Flags = backup_flags;
 
-        // Render clean 12px touch circles with Miku teal border
-        DrawProjectedTouchSwipes(draw);
+        DrawProjectedTouchSwipes(draw, sFactor);
 
         draw->PopClipRect();
     }
@@ -358,11 +341,14 @@ void DrawKeyboard() {
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     if (!draw) return;
 
-    const float startX = 479.0f;
-    const float startY = 618.0f;
-    const float keyH = 14.5f;
-    const float unitW = 20.0f;
-    const float pad = 2.0f;
+    ImVec2 screenSize = ImGui::GetIO().DisplaySize;
+    float s = screenSize.y / 720.0f;
+
+    const float startX = 479.0f * s;
+    const float startY = 618.0f * s;
+    const float keyH = 14.5f * s;
+    const float unitW = 20.0f * s;
+    const float pad = 2.0f * s;
 
     static const KeyVisual r0[] = { {41,"ESC",1.2f},{58,"F1",1.0f},{59,"F2",1.0f},{60,"F3",1.0f},{61,"F4",1.0f},{62,"F5",1.0f},{63,"F6",1.0f},{64,"F7",1.0f},{65,"F8",1.0f},{66,"F9",1.0f},{67,"F10",1.0f},{68,"F11",1.0f},{69,"F12",1.0f},{70,"PRT",1.6f} };
     static const KeyVisual r1[] = { {53,"~",1.0f},{30,"1",1.0f},{31,"2",1.0f},{32,"3",1.0f},{33,"4",1.0f},{34,"5",1.0f},{35,"6",1.0f},{36,"7",1.0f},{37,"8",1.0f},{38,"9",1.0f},{39,"0",1.0f},{45,"-",1.0f},{46,"+",1.0f},{42,"<-",1.8f} };
@@ -381,8 +367,8 @@ void DrawKeyboard() {
         { r5, sizeof(r5)/sizeof(r5[0]) }
     };
 
-    draw->AddRectFilled(ImVec2(startX - 4, startY - 4), ImVec2(startX + 326, startY + 101), ImColor(12, 15, 20, 230), 4.0f);
-    draw->AddRect(ImVec2(startX - 4, startY - 4), ImVec2(startX + 326, startY + 101), ImColor(0, 255, 200, 140), 4.0f, 0, 1.0f);
+    draw->AddRectFilled(ImVec2(startX - 4.0f * s, startY - 4.0f * s), ImVec2(startX + 326.0f * s, startY + 101.0f * s), ImColor(12, 15, 20, 230), 4.0f * s);
+    draw->AddRect(ImVec2(startX - 4.0f * s, startY - 4.0f * s), ImVec2(startX + 326.0f * s, startY + 101.0f * s), ImColor(0, 255, 200, 140), 4.0f * s, 0, 1.0f);
 
     float curY = startY;
     for (int r = 0; r < 6; r++) {
@@ -403,8 +389,8 @@ void DrawKeyboard() {
             ImU32 borderCol = isPressed ? ImColor(255, 255, 255, 255) : ImColor(50, 58, 72, 160);
             ImU32 textCol = isPressed ? ImColor(0, 0, 0, 255) : ImColor(210, 220, 235, 240);
 
-            draw->AddRectFilled(pMin, pMax, bgCol, 2.0f);
-            draw->AddRect(pMin, pMax, borderCol, 2.0f, 0, isPressed ? 1.5f : 0.8f);
+            draw->AddRectFilled(pMin, pMax, bgCol, 2.0f * s);
+            draw->AddRect(pMin, pMax, borderCol, 2.0f * s, 0, isPressed ? 1.5f : 0.8f);
 
             ImVec2 txtSz = ImGui::CalcTextSize(key.label);
             ImVec2 txtPos(pMin.x + (kw - txtSz.x) * 0.5f, pMin.y + (keyH - txtSz.y) * 0.5f);

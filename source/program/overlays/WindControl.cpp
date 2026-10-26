@@ -226,17 +226,19 @@ void Init() {
 void DrawWindow() {
     if (!g_showWindow) return;
 
+    float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
     ImGui::SetNextWindowBgAlpha(0.85f);
     std::string title = "Wind Control" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###WindControlWindow";
 
-    ImGui::SetNextWindowSizeConstraints(ImVec2(290.0f, -1.0f), ImVec2(310.0f, -1.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(290.0f * s, -1.0f), ImVec2(320.0f * s, -1.0f));
 
     if (ImGui::Begin(title.c_str(), &g_showWindow, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
         ImGui::Checkbox("Override", &g_overrideWind);
-        ImGui::SameLine(90.0f);
-        ImGui::PushItemWidth(120.0f);
+        ImGui::SameLine(90.0f * s);
+        ImGui::PushItemWidth(120.0f * s);
 
         if (VirtualKeyboard::ShouldFocusTarget()) {
             ImGui::SetKeyboardFocusHere(0);
@@ -254,7 +256,7 @@ void DrawWindow() {
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
-        if (ImGui::Button("Save", ImVec2(55.0f, 0.0f))) {
+        if (ImGui::Button("Save", ImVec2(55.0f * s, 0.0f))) {
             SaveCurrentWindFile(s_fileNameBuf);
         }
 
@@ -264,22 +266,25 @@ void DrawWindow() {
 
         ImGui::Separator();
 
+        const float halfBtnW = 135.0f * s;
+        const float fullBtnW = 275.0f * s;
+
         ImGui::Text("Presets:");
-        if (ImGui::Button("Upward (Lift)", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Upward (Lift)", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.08f; s_cycle = 0.01f; s_yrot = 90.0f; s_zrot = 80.0f; s_bias = 0.39f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_spectrum[2].cos = 0.03f; s_spectrum[3].cos = 0.09f;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Faint Lift", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Faint Lift", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.1f; s_cycle = 0.01f; s_yrot = 30.0f; s_zrot = 90.0f; s_bias = 0.1f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_spectrum[2].cos = 0.05f; s_spectrum[3].cos = 0.1f; s_spectrum[9].cos = 0.05f;
         }
 
-        if (ImGui::Button("Backward", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Backward", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.3f; s_cycle = 0.02f; s_yrot = 90.0f; s_zrot = 0.0f; s_bias = 0.5f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
@@ -287,7 +292,7 @@ void DrawWindow() {
             s_spectrum[9].sin = 0.02f; s_spectrum[10].sin = 0.08f;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Right", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Right", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.3f; s_cycle = 0.02f; s_yrot = 0.0f; s_zrot = 0.0f; s_bias = 0.5f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
@@ -295,35 +300,35 @@ void DrawWindow() {
             s_spectrum[9].sin = 0.02f; s_spectrum[10].sin = 0.08f;
         }
 
-        if (ImGui::Button("Zero-G Float", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Zero-G Float", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.04f; s_cycle = 0.005f; s_yrot = 0.0f; s_zrot = 85.0f; s_bias = 0.15f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_spectrum[1].cos = 0.02f;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Headwind", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Headwind", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.25f; s_cycle = 0.03f; s_yrot = 180.0f; s_zrot = 0.0f; s_bias = 0.4f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_spectrum[2].cos = 0.05f;
         }
 
-        if (ImGui::Button("Subtle Gust", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Subtle Gust", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true; s_controlMode = 0;
             s_scale = 0.008f; s_cycle = 0.01f; s_yrot = 300.0f; s_zrot = 80.0f; s_bias = 0.20f; s_strength = 1.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_spectrum[2].cos = 0.03f; s_spectrum[3].cos = 0.09f;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Zero (Off)", ImVec2(135.0f, 0.0f))) {
+        if (ImGui::Button("Zero (Off)", ImVec2(halfBtnW, 0.0f))) {
             g_overrideWind = true;
             s_scale = 0.0f; s_cycle = 0.0f; s_yrot = 0.0f; s_zrot = 0.0f; s_bias = 0.0f;
             std::memset(s_spectrum, 0, sizeof(s_spectrum));
             s_customVec[0] = s_customVec[1] = s_customVec[2] = 0.0f;
         }
 
-        if (ImGui::Button(s_showHelp ? "Hide Help" : "Help (? Info)", ImVec2(275.0f, 0.0f))) {
+        if (ImGui::Button(s_showHelp ? "Hide Help" : "Help (? Info)", ImVec2(fullBtnW, 0.0f))) {
             s_showHelp = !s_showHelp;
         }
 
@@ -349,7 +354,7 @@ void DrawWindow() {
         ImGui::Spacing();
 
         if (s_controlMode == 0) {
-            ImGui::PushItemWidth(165.0f);
+            ImGui::PushItemWidth(165.0f * s);
             ImGui::DragFloat("Scale", &s_scale, 0.0005f, 0.0000f, 1.0000f, "%.4f");
             ImGui::DragFloat("Cycle", &s_cycle, 0.001f, 0.000f, 2.000f, "%.3f");
             ImGui::SliderFloat("Rot Y", &s_yrot, -180.0f, 360.0f, "%.0f deg");
@@ -361,7 +366,7 @@ void DrawWindow() {
             ImGui::Spacing();
 
             if (ImGui::CollapsingHeader("Harmonic Spectrum (spc 0..15)")) {
-                if (ImGui::Button("Clear All (0)", ImVec2(275.0f, 0.0f))) {
+                if (ImGui::Button("Clear All (0)", ImVec2(fullBtnW, 0.0f))) {
                     std::memset(s_spectrum, 0, sizeof(s_spectrum));
                 }
 
@@ -369,7 +374,7 @@ void DrawWindow() {
                     ImGui::PushID(i);
                     ImGui::Text("%2d:", i);
                     ImGui::SameLine();
-                    ImGui::PushItemWidth(100.0f);
+                    ImGui::PushItemWidth(100.0f * s);
                     ImGui::DragFloat("cos", &s_spectrum[i].cos, 0.002f, -2.0f, 2.0f, "%.3f");
                     ImGui::SameLine();
                     ImGui::DragFloat("sin", &s_spectrum[i].sin, 0.002f, -2.0f, 2.0f, "%.3f");
@@ -378,30 +383,31 @@ void DrawWindow() {
                 }
             }
         } else {
-            ImGui::PushItemWidth(165.0f);
+            ImGui::PushItemWidth(165.0f * s);
             ImGui::DragFloat("Force X", &s_customVec[0], 0.001f, -0.200f, 0.200f, "%.4f");
             ImGui::DragFloat("Force Y", &s_customVec[1], 0.001f, -0.200f, 0.200f, "%.4f");
             ImGui::DragFloat("Force Z", &s_customVec[2], 0.001f, -0.200f, 0.200f, "%.4f");
             ImGui::SliderFloat("Strength", &s_strength, 0.0f, 1.0f, "%.2f");
             ImGui::PopItemWidth();
 
+            const float dirBtnW = 65.0f * s;
             ImGui::Text("Quick Direction:");
-            if (ImGui::Button("Up", ImVec2(65.0f, 0.0f)))    { s_customVec[0] =  0.0f;   s_customVec[1] =  0.035f; s_customVec[2] = 0.0f; }
+            if (ImGui::Button("Up", ImVec2(dirBtnW, 0.0f)))    { s_customVec[0] =  0.0f;   s_customVec[1] =  0.035f; s_customVec[2] = 0.0f; }
             ImGui::SameLine();
-            if (ImGui::Button("Down", ImVec2(65.0f, 0.0f)))  { s_customVec[0] =  0.0f;   s_customVec[1] = -0.035f; s_customVec[2] = 0.0f; }
+            if (ImGui::Button("Down", ImVec2(dirBtnW, 0.0f)))  { s_customVec[0] =  0.0f;   s_customVec[1] = -0.035f; s_customVec[2] = 0.0f; }
             ImGui::SameLine();
-            if (ImGui::Button("Left", ImVec2(65.0f, 0.0f)))  { s_customVec[0] = -0.025f; s_customVec[1] =  0.0f;   s_customVec[2] = 0.0f; }
+            if (ImGui::Button("Left", ImVec2(dirBtnW, 0.0f)))  { s_customVec[0] = -0.025f; s_customVec[1] =  0.0f;   s_customVec[2] = 0.0f; }
             ImGui::SameLine();
-            if (ImGui::Button("Right", ImVec2(65.0f, 0.0f))) { s_customVec[0] =  0.025f; s_customVec[1] =  0.0f;   s_customVec[2] = 0.0f; }
+            if (ImGui::Button("Right", ImVec2(dirBtnW, 0.0f))) { s_customVec[0] =  0.025f; s_customVec[1] =  0.0f;   s_customVec[2] = 0.0f; }
 
-            if (ImGui::Button("Stop (0)", ImVec2(275.0f, 0.0f))) {
+            if (ImGui::Button("Stop (0)", ImVec2(fullBtnW, 0.0f))) {
                 s_customVec[0] = s_customVec[1] = s_customVec[2] = 0.0f;
             }
         }
 
         ImGui::Separator();
         if (ImGui::CollapsingHeader("Custom TXT Files (SD)")) {
-            if (ImGui::Button("Refresh List", ImVec2(275.0f, 0.0f))) {
+            if (ImGui::Button("Refresh List", ImVec2(fullBtnW, 0.0f))) {
                 RefreshFiles();
             }
 
@@ -417,7 +423,7 @@ void DrawWindow() {
                     if ((i - startIdx) % 2 != 0) {
                         ImGui::SameLine();
                     }
-                    if (ImGui::Button(s_savedFiles[i].c_str(), ImVec2(135.0f, 24.0f))) {
+                    if (ImGui::Button(s_savedFiles[i].c_str(), ImVec2(halfBtnW, 24.0f * s))) {
                         char full[128];
                         snprintf(full, sizeof(full), "ExlSD:/MikuMikuSwitchPlugin/Wind/%s", s_savedFiles[i].c_str());
                         if (LoadFromSegaTxt(full)) {
@@ -430,14 +436,14 @@ void DrawWindow() {
 
                 if (total_pages > 1) {
                     ImGui::Spacing();
-                    if (ImGui::Button("<##wprev", ImVec2(34.0f, 22.0f))) {
+                    if (ImGui::Button("<##wprev", ImVec2(34.0f * s, 22.0f * s))) {
                         if (s_fileCurrentPage > 0) s_fileCurrentPage--;
                     }
                     ImGui::SameLine();
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 45.0f);
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 45.0f * s);
                     ImGui::Text("Page %d/%d", s_fileCurrentPage + 1, total_pages);
-                    ImGui::SameLine(240.0f);
-                    if (ImGui::Button(">##wnext", ImVec2(34.0f, 22.0f))) {
+                    ImGui::SameLine(240.0f * s);
+                    if (ImGui::Button(">##wnext", ImVec2(34.0f * s, 22.0f * s))) {
                         if (s_fileCurrentPage < total_pages - 1) s_fileCurrentPage++;
                     }
                 }

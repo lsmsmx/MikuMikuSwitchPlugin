@@ -267,7 +267,6 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
 
         if (Config::disableAdp) {
             *adp_low = 0; // Disable ADP completely
-
             *(uint8_t*)(config + 0x7f) = 1; // 1 = -no_npr
 
             // Apply fixed scaler only when ADP is disabled
@@ -304,6 +303,52 @@ HOOK_DEFINE_TRAMPOLINE(RandomInitHook) {
         }
 
         return result;
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(CommandLineArgsHook) {
+    static void Callback(int32_t a1, uintptr_t a2) {
+        Orig(a1, a2);
+
+        uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
+        uintptr_t config = *(uintptr_t*)(base + 0x00cdf838);
+
+        if (!config) return;
+
+        // Internal Game Resolution Override
+        if (config && Config::gameRes != "default") {
+            uint32_t res_id = 0;
+            uint32_t sub_val = 0;
+            bool is_1080p = false;
+
+            // 16:9 standard modes
+            if (Config::gameRes == "hdtv720")          { res_id = 0x0D; sub_val = 1; }
+            else if (Config::gameRes == "hdtv720_dbd")  { res_id = 0x0D; sub_val = 0; }
+            else if (Config::gameRes == "hdtv1080")     { res_id = 0x0E; sub_val = 0; is_1080p = true; }
+            else if (Config::gameRes == "wqhd")         { res_id = 0x11; sub_val = 0; }
+            else if (Config::gameRes == "wvga")         { res_id = 0x07; sub_val = 0; }
+            // Other aspect ratios (4:3, 16:10, etc.)
+            else if (Config::gameRes == "qvga")         { res_id = 0x00; sub_val = 0; }
+            else if (Config::gameRes == "vga")          { res_id = 0x01; sub_val = 0; }
+            else if (Config::gameRes == "svga")         { res_id = 0x02; sub_val = 0; }
+            else if (Config::gameRes == "xga")          { res_id = 0x03; sub_val = 0; }
+            else if (Config::gameRes == "wxga")         { res_id = 0x09; sub_val = 1; }
+            else if (Config::gameRes == "wxga_dbd")     { res_id = 0x09; sub_val = 0; }
+            else if (Config::gameRes == "uxga")         { res_id = 0x06; sub_val = 0; }
+            else if (Config::gameRes == "wuxga")        { res_id = 0x0B; sub_val = 0; }
+            else if (Config::gameRes == "wqxga")        { res_id = 0x0C; sub_val = 0; }
+
+            *(uint32_t*)(config + 0x24) = res_id;
+            *(uint32_t*)(config + 0x2c) = sub_val;
+            if (is_1080p) {
+                *(uint8_t*)(config + 0xa4) = 1;
+            }
+        }
+
+        // Enable internal -aa flag when SSAA is enabled
+        if (config && Config::ssaaMode == "on") {
+            *(uint32_t*)(config + 0x28) = 1; // Native -aa flag
+        }
     }
 };
 
@@ -526,6 +571,16 @@ HOOK_DEFINE_TRAMPOLINE(MLAA_Pass3_Fix) {
     }
 };
 
+// Bloom fix for 1080+ (set any fb_level greater than 3 to 3)
+HOOK_DEFINE_TRAMPOLINE(ReduceTextureFixHook) {
+    static void Callback(int32_t* render_ptr, uintptr_t a2, uintptr_t a3) {
+        if (render_ptr && *render_ptr > 3) {
+            *render_ptr = 3;
+        }
+        Orig(render_ptr, a2, a3);
+    }
+};
+
 // =========================================================================
 // Future Tone Customization Menu Lighting
 // =========================================================================
@@ -601,6 +656,7 @@ HOOK_DEFINE_TRAMPOLINE(CustomizeSetLightingInfoHook) {
 
 void FTRestoration::init() {
     RandomInitHook::InstallAtOffset(0x1f4150);
+    CommandLineArgsHook::InstallAtOffset(0x001ff5d0);
 
     // Extra FT Graphics Restoration (adp getters)
     if (Config::extraFtGraphics) {
@@ -838,6 +894,10 @@ void FTRestoration::init() {
     RenderSetSatCoefHook::InstallAtOffset(0x004a0190);
     ToneMapHook::InstallAtOffset(0x4a6cc0);
     SetFxaaParamsHook::InstallAtOffset(0x4a0550);
+
+    // 11. Bloom fix for high res
+    ReduceTextureFixHook::InstallAtOffset(0x004a5660);
+
 
     // MAG Filter patches
     if (Config::magFilterMode != "default") {

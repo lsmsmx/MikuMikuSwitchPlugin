@@ -8,6 +8,7 @@
 #include "FontLoader.hpp"
 #include "keyboard.hpp"
 #include "Config.hpp"
+#include "lib.hpp"
 
 #include "overlays/ExtraMenu.hpp"
 #include "overlays/InputOverlay.hpp"
@@ -42,6 +43,9 @@ namespace ImGui {
 
     static float g_cursorX = 640.0f;
     static float g_cursorY = 360.0f;
+
+    static ImGuiStyle s_baseStyle;
+    static bool s_baseStyleCached = false;
 
     void Init() {
         MemoryScannerUi::Init();
@@ -112,6 +116,9 @@ extern "C" IMNVNFUNC void nvnImguiInitialize() {
     style.Colors[ImGuiCol_Separator]             = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
 
     FontLoader::LoadFonts(ImGui::GetIO());
+
+    ImGui::s_baseStyle = style;
+    ImGui::s_baseStyleCached = true;
 }
 
 extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
@@ -273,20 +280,36 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         return nullptr;
     }
 
+    // Read live engine resolution dynamically from memory
+    uintptr_t mainBase = exl::util::GetMainModuleInfo().m_Total.m_Start;
+    uint32_t engineWidth  = *(uint32_t*)(mainBase + 0x00CA896C);
+    uint32_t engineHeight = *(uint32_t*)(mainBase + 0x00CA8970);
+
+    float screenW = (engineWidth >= 640 && engineWidth <= 7680) ? (float)engineWidth : 1280.0f;
+    float screenH = (engineHeight >= 360 && engineHeight <= 4320) ? (float)engineHeight : 720.0f;
+
     ImGuiIO& io = ImGui::GetIO();
     io.DeltaTime = dt;
-    io.DisplaySize = ImVec2(1280.0f, 720.0f);
+    io.DisplaySize = ImVec2(screenW, screenH);
+
+    float scaleX = screenW / 1280.0f;
+    float scaleY = screenH / 720.0f;
+
+    io.FontGlobalScale = 1.0;
+
+    if (ImGui::s_baseStyleCached) {
+        ImGui::GetStyle() = ImGui::s_baseStyle;
+        ImGui::GetStyle().ScaleAllSizes(scaleY);
+    }
 
     bool isLeftClick = false, isRightClick = false, isTouchActive = false;
 
-    // Mouse cursor activity timer
     static float s_mouseActivityTimer = 0.0f;
     if (s_mouseActivityTimer > 0.0f) {
         s_mouseActivityTimer -= dt;
         if (s_mouseActivityTimer < 0.0f) s_mouseActivityTimer = 0.0f;
     }
 
-    // Hide mouse cursor when gamepad buttons are pressed
     uint64_t padActionButtons = nn::hid::Button::A | nn::hid::Button::B | nn::hid::Button::X | nn::hid::Button::Y |
                                 nn::hid::Button::Up | nn::hid::Button::Down | nn::hid::Button::Left | nn::hid::Button::Right |
                                 nn::hid::Button::L | nn::hid::Button::R | nn::hid::Button::Minus | nn::hid::Button::Plus;
@@ -297,7 +320,6 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     bool isZLPressed = (npad.buttons & nn::hid::Button::ZL) != 0;
     bool isZRPressed = (npad.buttons & nn::hid::Button::ZR) != 0;
 
-    // Toggle input focus: Hold ZL + ZR for 0.5s
     if (anyUiOpen) {
         static float switchHoldTime = 0.0f;
         if (isZLPressed && isZRPressed) {
@@ -314,13 +336,12 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
     }
 
     if (anyUiOpen && ImGui::g_imguiHasFocus) {
-        // 1. Touchscreen input
         if (nn::hid::GetTouchScreenState) {
             nn::hid::TouchScreenState ts = {};
             nn::hid::GetTouchScreenState(&ts);
             if (ts.count > 0) {
-                ImGui::g_cursorX = (float)ts.touches[0].x;
-                ImGui::g_cursorY = (float)ts.touches[0].y;
+                ImGui::g_cursorX = (float)ts.touches[0].x * scaleX;
+                ImGui::g_cursorY = (float)ts.touches[0].y * scaleY;
                 isTouchActive = true;
                 s_mouseActivityTimer = 0.0f;
                 if (ts.count >= 2) isRightClick = true;
@@ -328,7 +349,6 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
-        // 2. Physical mouse input
         if (nn::hid::GetMouseState && !isTouchActive) {
             nn::hid::MouseState ms = {};
             nn::hid::GetMouseState(&ms);
@@ -344,12 +364,11 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
-        // 3. Left analog stick mouse cursor emulation
         if (!isTouchActive) {
             float lx = (float)npad.analogStickL[0] / 32767.0f;
             float ly = -(float)npad.analogStickL[1] / 32767.0f;
             if (std::abs(lx) > 0.15f || std::abs(ly) > 0.15f) {
-                float speedMult = (npad.buttons & nn::hid::Button::Y) ? 12.0f : 5.0f;
+                float speedMult = ((npad.buttons & nn::hid::Button::Y) ? 12.0f : 5.0f) * scaleY;
                 float frameComp = dt * 60.0f;
                 ImGui::g_cursorX += lx * speedMult * frameComp;
                 ImGui::g_cursorY += ly * speedMult * frameComp;
@@ -361,22 +380,18 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
             }
         }
 
-        ImGui::g_cursorX = std::clamp(ImGui::g_cursorX, 0.0f, 1280.0f);
-        ImGui::g_cursorY = std::clamp(ImGui::g_cursorY, 0.0f, 720.0f);
+        ImGui::g_cursorX = std::clamp(ImGui::g_cursorX, 0.0f, screenW);
+        ImGui::g_cursorY = std::clamp(ImGui::g_cursorY, 0.0f, screenH);
     }
 
     bool isFullWindowOpen = ImGui::g_isMenuOpen || MotionPlayerUi::g_showUltimatePlayer ||
                          MotionPlayerUi::g_showMotionControlWindow || WindControl::g_showWindow;
 
-    // =========================================================================
-    // MOUSE CURSOR DISPLAY
-    // =========================================================================
     bool shouldDrawCursor = false;
     if (ImGui::g_imguiHasFocus && !isTouchActive) {
         if (isFullWindowOpen) {
             shouldDrawCursor = true;
         }
-        // Show cursor if UI is active and mouse was moved
         else if (s_mouseActivityTimer > 0.0f) {
             shouldDrawCursor = true;
         }
@@ -408,11 +423,11 @@ extern "C" IMNVNFUNC ImDrawData* nvnImguiCalc() {
         // Mot & Wind Control Collapsing Header
         if (ImGui::CollapsingHeader("Mot & Wind Control ")) {
             ImGui::Separator();
-            if (ImGui::Button("Motion Control", ImVec2(130.0f, 0.0f))) {
+            if (ImGui::Button("Motion Control", ImVec2(130.0f * scaleY, 0.0f))) {
                 MotionPlayerUi::g_showMotionControlWindow = !MotionPlayerUi::g_showMotionControlWindow;
             }
             ImGui::SameLine();
-            if (ImGui::Button("Wind Control", ImVec2(130.0f, 0.0f))) {
+            if (ImGui::Button("Wind Control", ImVec2(130.0f * scaleY, 0.0f))) {
                 WindControl::g_showWindow = !WindControl::g_showWindow;
             }
 

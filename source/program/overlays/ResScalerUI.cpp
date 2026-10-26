@@ -12,7 +12,6 @@ namespace ResScalerUi {
     void DrawWindow() {
         if (!g_showWindow) return;
 
-        // Resolve live graphics manager pointer on demand
         uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
         uintptr_t lvar1 = *(uintptr_t*)(base + 0x00cdf890);
 
@@ -28,8 +27,9 @@ namespace ResScalerUi {
         };
 
         ImVec2 screenSize = ImGui::GetIO().DisplaySize;
-        // Anchor to bottom-right corner with 12px margin
-        ImGui::SetNextWindowPos(ImVec2(screenSize.x - 12.0f, screenSize.y - 12.0f), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+        float s = screenSize.y / 720.0f;
+
+        ImGui::SetNextWindowPos(ImVec2(screenSize.x - (12.0f * s), screenSize.y - (12.0f * s)), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
         ImGui::SetNextWindowBgAlpha(0.85f);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -38,21 +38,22 @@ namespace ResScalerUi {
                                  ImGuiWindowFlags_NoMove |
                                  ImGuiWindowFlags_NoSavedSettings;
 
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * s, 8.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f * s, 4.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
+
         if (ImGui::Begin("###ResScalerHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
-            // Header showing currently active scale
             ImGui::TextColored(ImVec4(0.28f, 0.88f, 0.83f, 1.0f), "Resolution: %.3fx", Config::resScaler);
             ImGui::Separator();
             ImGui::Spacing();
 
-            const ImVec2 btnSize(48, 26);
+            const ImVec2 btnSize(48.0f * s, 26.0f * s);
 
-            // Helper to render buttons and highlight the active one
             auto DrawScaleBtn = [&](const char* label, float val) {
                 bool isActive = std::abs(Config::resScaler - val) < 0.005f;
                 if (isActive) {
-                    // Highlight active button with Miku teal
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28f, 0.88f, 0.83f, 0.95f));
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
                 }
@@ -66,13 +67,13 @@ namespace ResScalerUi {
                 }
             };
 
-            // --- ROW 1: 0.3, 0.4, 0.5, 0.6 ---
+            // Row 1: 0.3, 0.4, 0.5, 0.6
             DrawScaleBtn("0.3x", 0.300f); ImGui::SameLine();
             DrawScaleBtn("0.4x", 0.400f); ImGui::SameLine();
             DrawScaleBtn("0.5x", 0.500f); ImGui::SameLine();
             DrawScaleBtn("0.6x", 0.600f);
 
-            // --- ROW 2: 0.675, 0.8, 0.9, 1.0 ---
+            // Row 2: 0.675, 0.8, 0.9, 1.0
             DrawScaleBtn("0.675x", 0.675f); ImGui::SameLine();
             DrawScaleBtn("0.8x", 0.800f);  ImGui::SameLine();
             DrawScaleBtn("0.9x", 0.900f);  ImGui::SameLine();
@@ -81,6 +82,8 @@ namespace ResScalerUi {
             ImGui::GetWindowDrawList()->PopClipRect();
         }
         ImGui::End();
+
+        ImGui::PopStyleVar(3);
     }
 
 } // namespace ResScalerUi

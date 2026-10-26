@@ -330,6 +330,8 @@ void Draw() {
     ImGuiIO& io = ImGui::GetIO();
     float dt = io.DeltaTime;
 
+    float s = io.DisplaySize.y / 720.0f;
+
     if (s_notFoundTimer > 0.0f) {
         s_notFoundTimer -= dt;
         s_notFoundAnim += (1.0f - s_notFoundAnim) * std::min(dt * 12.0f, 1.0f);
@@ -337,17 +339,17 @@ void Draw() {
         s_notFoundAnim += (0.0f - s_notFoundAnim) * std::min(dt * 12.0f, 1.0f);
     }
 
-    const float posX = 800.0f;
-    const float posY = 44.0f;
-    const float barW = 300.0f;
-    const float barH = 34.0f;
+    const float posX = 800.0f * s;
+    const float posY = 44.0f * s;
+    const float barW = 300.0f * s;
+    const float barH = 34.0f * s;
 
-    const float topBtnW = 70.0f;
-    const float topTabH = 25.0f;
-    const float bannerH = 26.0f;
+    const float topBtnW = 70.0f * s;
+    const float topTabH = 25.0f * s;
+    const float bannerH = 26.0f * s;
 
     ImGui::SetNextWindowPos(ImVec2(posX, posY - topTabH), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(barW, barH + topTabH + bannerH + 6.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(barW, barH + topTabH + bannerH + 6.0f * s), ImGuiCond_Always);
     ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -372,12 +374,12 @@ void Draw() {
         const ImU32 colText    = IM_COL32(235, 240, 245, 255);
 
         if (s_notFoundAnim > 0.01f) {
-            float curBannerY = posY + barH - 2.0f + (bannerH * s_notFoundAnim);
-            ImVec2 bMin(posX + 15.0f, posY + barH - 2.0f);
-            ImVec2 bMax(posX + barW - 15.0f, curBannerY);
+            float curBannerY = posY + barH - 2.0f * s + (bannerH * s_notFoundAnim);
+            ImVec2 bMin(posX + 15.0f * s, posY + barH - 2.0f * s);
+            ImVec2 bMax(posX + barW - 15.0f * s, curBannerY);
 
-            draw->AddRectFilled(bMin, bMax, IM_COL32(40, 20, 24, (int)(245 * s_notFoundAnim)), 6.0f, ImDrawFlags_RoundCornersBottom);
-            draw->AddRect(bMin, bMax, IM_COL32(245, 65, 85, (int)(225 * s_notFoundAnim)), 6.0f, ImDrawFlags_RoundCornersBottom, 1.2f);
+            draw->AddRectFilled(bMin, bMax, IM_COL32(40, 20, 24, (int)(245 * s_notFoundAnim)), 6.0f * s, ImDrawFlags_RoundCornersBottom);
+            draw->AddRect(bMin, bMax, IM_COL32(245, 65, 85, (int)(225 * s_notFoundAnim)), 6.0f * s, ImDrawFlags_RoundCornersBottom, 1.2f);
 
             ImFont* font = ImGui::GetFont();
             float bFontSize = font->FontSize * 0.95f;
@@ -388,29 +390,29 @@ void Draw() {
             draw->AddText(font, bFontSize, txtPos, IM_COL32(255, 190, 200, (int)(255 * s_notFoundAnim)), notFoundTxt);
         }
 
-        draw->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + barW, posY + barH), colBarBg, 6.0f);
-        draw->AddRect(ImVec2(posX, posY), ImVec2(posX + barW, posY + barH), colBarBdr, 6.0f, 0, 1.2f);
+        draw->AddRectFilled(ImVec2(posX, posY), ImVec2(posX + barW, posY + barH), colBarBg, 6.0f * s);
+        draw->AddRect(ImVec2(posX, posY), ImVec2(posX + barW, posY + barH), colBarBdr, 6.0f * s, 0, 1.2f);
 
         ImFont* font = ImGui::GetFont();
         float badgeFontSize = font->FontSize * 1.15f;
 
         const float topBtnX = posX;
-        const float topBtnY = posY - topTabH + 1.0f;
+        const float topBtnY = posY - topTabH + 1.0f * s;
         ImVec2 topMin(topBtnX, topBtnY);
-        ImVec2 topMax(topBtnX + topBtnW, posY + 1.0f);
+        ImVec2 topMax(topBtnX + topBtnW, posY + 1.0f * s);
         bool topHov = (io.MousePos.x >= topMin.x && io.MousePos.x <= topMax.x && io.MousePos.y >= topMin.y && io.MousePos.y <= topMax.y);
         if (topHov && ImGui::IsMouseClicked(0)) s_searchById = !s_searchById;
-        draw->AddRectFilled(topMin, topMax, colBarBg, 6.0f, ImDrawFlags_RoundCornersAll);
-        draw->AddRect(topMin, topMax, colBarBdr, 6.0f, ImDrawFlags_RoundCornersAll, 1.2f);
+        draw->AddRectFilled(topMin, topMax, colBarBg, 6.0f * s, ImDrawFlags_RoundCornersAll);
+        draw->AddRect(topMin, topMax, colBarBdr, 6.0f * s, ImDrawFlags_RoundCornersAll, 1.2f);
 
         const char* topLabel = s_searchById ? "ID" : "NAME";
         ImVec2 topSz = font->CalcTextSizeA(badgeFontSize, FLT_MAX, 0.0f, topLabel);
         draw->AddText(font, badgeFontSize, ImVec2(topMin.x + (topBtnW - topSz.x) * 0.5f, topMin.y + (topTabH - topSz.y) * 0.5f), colText, topLabel);
 
-        const float kbBtnW = 44.0f;
-        const float kbBtnH = barH - 8.0f;
-        const float kbBtnX = posX + 5.0f;
-        const float kbBtnY = posY + 4.0f;
+        const float kbBtnW = 44.0f * s;
+        const float kbBtnH = barH - 8.0f * s;
+        const float kbBtnX = posX + 5.0f * s;
+        const float kbBtnY = posY + 4.0f * s;
         ImVec2 kbMin(kbBtnX, kbBtnY);
         ImVec2 kbMax(kbBtnX + kbBtnW, kbBtnY + kbBtnH);
         bool kbHov = (io.MousePos.x >= kbMin.x && io.MousePos.x <= kbMax.x && io.MousePos.y >= kbMin.y && io.MousePos.y <= kbMax.y);
@@ -419,34 +421,34 @@ void Draw() {
             VirtualKeyboard::Open(s_inputBuf, sizeof(s_inputBuf), "JUMP TO SONG", ExecuteSearchAndJump);
         }
 
-        draw->AddRectFilled(kbMin, kbMax, colBtnFlat, 4.0f);
-        draw->AddRect(kbMin, kbMax, colBarBdr, 4.0f, 0, 1.0f);
+        draw->AddRectFilled(kbMin, kbMax, colBtnFlat, 4.0f * s);
+        draw->AddRect(kbMin, kbMax, colBarBdr, 4.0f * s, 0, 1.0f);
         const char* kbLabel = "KB";
         ImVec2 kbSz = font->CalcTextSizeA(badgeFontSize, FLT_MAX, 0.0f, kbLabel);
         draw->AddText(font, badgeFontSize, ImVec2(kbMin.x + (kbBtnW - kbSz.x) * 0.5f, kbMin.y + (kbBtnH - kbSz.y) * 0.5f), colText, kbLabel);
 
-        const float jumpW = 34.0f;
-        const float jumpH = barH - 8.0f;
-        const float jumpX = posX + barW - jumpW - 5.0f;
-        const float jumpY = posY + 4.0f;
+        const float jumpW = 34.0f * s;
+        const float jumpH = barH - 8.0f * s;
+        const float jumpX = posX + barW - jumpW - 5.0f * s;
+        const float jumpY = posY + 4.0f * s;
         ImVec2 jMin(jumpX, jumpY);
         ImVec2 jMax(jumpX + jumpW, jumpY + jumpH);
         bool jHov = (io.MousePos.x >= jMin.x && io.MousePos.x <= jMax.x && io.MousePos.y >= jMin.y && io.MousePos.y <= jMax.y);
         if (jHov && ImGui::IsMouseClicked(0)) ExecuteSearchAndJump();
-        draw->AddRectFilled(jMin, jMax, jHov ? IM_COL32(0, 235, 185, 255) : IM_COL32(0, 200, 160, 235), 4.0f);
-        draw->AddRect(jMin, jMax, IM_COL32(255, 255, 255, 120), 4.0f, 0, 1.0f);
+        draw->AddRectFilled(jMin, jMax, jHov ? IM_COL32(0, 235, 185, 255) : IM_COL32(0, 200, 160, 235), 4.0f * s);
+        draw->AddRect(jMin, jMax, IM_COL32(255, 255, 255, 120), 4.0f * s, 0, 1.0f);
         float jFontSize = font->FontSize * 1.20f;
         ImVec2 jSz = font->CalcTextSizeA(jFontSize, FLT_MAX, 0.0f, "->");
-        draw->AddText(font, jFontSize, ImVec2(jMin.x + (jumpW - jSz.x) * 0.5f, jMin.y + (jumpH - jSz.y) * 0.5f), IM_COL32(20, 25, 30, 255), "->");
+        draw->AddText(font, jFontSize, ImVec2(jMin.x + (jumpW - jSz.x) * 0.5f, jMin.y + (jumpH - jSz.y) * 0.5f), IM_COL32(255, 255, 255, 255), "->");
 
-        const float inX = kbBtnX + kbBtnW + 5.0f;
-        const float inW = (jumpX - 5.0f) - inX;
+        const float inX = kbBtnX + kbBtnW + 5.0f * s;
+        const float inW = (jumpX - 5.0f * s) - inX;
 
-        ImGui::SetCursorScreenPos(ImVec2(inX, posY + 4.0f));
+        ImGui::SetCursorScreenPos(ImVec2(inX, posY + 4.0f * s));
         ImGui::SetNextItemWidth(inW);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 7.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f * s, 7.0f * s));
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.13f, 0.16f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.14f, 0.18f, 0.22f, 1.00f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.98f, 1.00f, 1.00f));
@@ -454,7 +456,6 @@ void Draw() {
 
         const char* hint = s_searchById ? "PV ID..." : "Song Name...";
 
-        // Synchronize callback: active only when virtual keyboard is open
         auto InputTextScrollCallback = [](ImGuiInputTextCallbackData* data) -> int {
             if (VirtualKeyboard::IsOpen()) {
                 if (strcmp(data->Buf, s_inputBuf) != 0) {
@@ -470,8 +471,6 @@ void Draw() {
                 }
                 return VirtualKeyboard::InputTextCallback(data);
             }
-
-            // When virtual keyboard is closed, allow native ImGui input management
             return 0;
         };
 
@@ -479,7 +478,6 @@ void Draw() {
             ImGui::SetKeyboardFocusHere(0);
         }
 
-        // Enter key triggers search
         bool enterPressed = ImGui::InputTextWithHint(
             "##song_input", hint, s_inputBuf, sizeof(s_inputBuf),
             ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue,
@@ -490,19 +488,16 @@ void Draw() {
             ExecuteSearchAndJump();
         }
 
-        // Escape key clears the input buffer
         if (io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             s_inputBuf[0] = '\0';
         }
 
-        // Open virtual keyboard on click unless physical keyboard was recently used
         if (ImGui::IsItemClicked()) {
             if (!keyboard::IsRecentlyUsed()) {
                 VirtualKeyboard::Open(s_inputBuf, sizeof(s_inputBuf), "JUMP TO SONG", ExecuteSearchAndJump);
             }
         }
 
-        // Blinking cursor for virtual keyboard mode
         if (VirtualKeyboard::IsOpen()) {
             ImVec2 itemMin = ImGui::GetItemRectMin();
             ImVec2 itemMax = ImGui::GetItemRectMax();
@@ -520,11 +515,11 @@ void Draw() {
             ImGuiInputTextState* state = ImGui::GetInputTextState(ImGui::GetID("##song_input"));
             float scrollX = (state != nullptr) ? state->ScrollX : 0.0f;
 
-            float cursorX  = itemMin.x + 6.0f + textWidth - scrollX;
-            float cursorY1 = itemMin.y + 5.0f;
-            float cursorY2 = itemMax.y - 5.0f;
+            float cursorX  = itemMin.x + 6.0f * s + textWidth - scrollX;
+            float cursorY1 = itemMin.y + 5.0f * s;
+            float cursorY2 = itemMax.y - 5.0f * s;
 
-            if (cursorX >= itemMin.x + 4.0f && cursorX <= itemMax.x - 4.0f) {
+            if (cursorX >= itemMin.x + 4.0f * s && cursorX <= itemMax.x - 4.0f * s) {
                 static float s_blinkTimer = 0.0f;
                 s_blinkTimer += io.DeltaTime;
                 if (fmodf(s_blinkTimer, 0.9f) < 0.55f) {

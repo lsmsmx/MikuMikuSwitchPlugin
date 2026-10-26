@@ -68,6 +68,8 @@ static int s_currentPage = 0;
 
 void Draw() {
     if (ImGui::CollapsingHeader("State Switcher")) {
+        float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
         ImGui::Separator();
 
         if (ImGui::Checkbox("Debug Mode Patches", &DebugMode::g_DebugModeEnabled)) {
@@ -76,14 +78,17 @@ void Draw() {
 
         ImGui::Separator();
 
-        constexpr int total_items    = sizeof(allScenes) / sizeof(allScenes[0]); // 48
-        constexpr int items_per_page = 12; // 6 rows x 2 buttons
-        constexpr int total_pages    = (total_items + items_per_page - 1) / items_per_page; // 4
+        constexpr int total_items    = sizeof(allScenes) / sizeof(allScenes[0]);
+        constexpr int items_per_page = 12;
+        constexpr int total_pages    = (total_items + items_per_page - 1) / items_per_page;
 
         s_currentPage = std::clamp(s_currentPage, 0, total_pages - 1);
 
         int startIdx = s_currentPage * items_per_page;
         int endIdx   = std::min(startIdx + items_per_page, total_items);
+
+        const float btnW = 130.0f * s;
+        const float btnH = 26.0f * s;
 
         // 1. Grid of 2 columns
         for (int i = startIdx; i < endIdx; i++) {
@@ -91,7 +96,7 @@ void Draw() {
                 ImGui::SameLine();
             }
 
-            if (ImGui::Button(allScenes[i].name, ImVec2(130.0f, 26.0f))) {
+            if (ImGui::Button(allScenes[i].name, ImVec2(btnW, btnH))) {
                 DebugMode::RequestStateChange(
                     static_cast<DebugMode::GameState>(allScenes[i].st),
                     static_cast<DebugMode::GameSubState>(allScenes[i].sub)
@@ -104,10 +109,10 @@ void Draw() {
 
         // 2. Navigation bar
         float startX    = ImGui::GetCursorPosX();
-        float gridWidth = 130.0f * 2.0f + ImGui::GetStyle().ItemSpacing.x;
-        float btnW      = 34.0f;
+        float gridWidth = btnW * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+        float navBtnW   = 34.0f * s;
 
-        if (ImGui::Button("<##PrevPage", ImVec2(btnW, 24.0f))) {
+        if (ImGui::Button("<##PrevPage", ImVec2(navBtnW, 24.0f * s))) {
             if (s_currentPage > 0) s_currentPage--;
         }
 
@@ -120,8 +125,8 @@ void Draw() {
         ImGui::Text("%s", pageText);
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX(startX + gridWidth - btnW);
-        if (ImGui::Button(">##NextPage", ImVec2(btnW, 24.0f))) {
+        ImGui::SetCursorPosX(startX + gridWidth - navBtnW);
+        if (ImGui::Button(">##NextPage", ImVec2(navBtnW, 24.0f * s))) {
             if (s_currentPage < total_pages - 1) s_currentPage++;
         }
     }

@@ -18,7 +18,6 @@ namespace Dimming {
     };
 
     static constexpr uintptr_t ADDR_DRAW_RECT          = 0x00612640;
-    static constexpr uintptr_t ADDR_TASK_PV_GAME_INIT  = 0x0064c910;
     static constexpr uintptr_t ADDR_TASK_PV_GAME_DISP  = 0x0064c9b0;
     static constexpr uintptr_t ADDR_CURRENT_PV_ID      = 0x00be3888bc;
 
@@ -45,20 +44,12 @@ namespace Dimming {
         s_pvSettings[pv_id] = dim_percent;
     }
 
-    // Apply saved dim percentage when song initializes
-    HOOK_DEFINE_TRAMPOLINE(TaskPvGameInit_Hook) {
-        static int64_t Callback(uintptr_t a1) {
-            int64_t ret = Orig(a1);
-
-            // If per-song dim setting exists, apply it
-            int32_t pv_id = GetLivePvId();
-            if (auto it = s_pvSettings.find(pv_id); it != s_pvSettings.end()) {
-                Config::dim = it->second;
-            }
-
-            return ret;
+    void OnPvGameInit() {
+        int32_t pv_id = GetLivePvId();
+        if (auto it = s_pvSettings.find(pv_id); it != s_pvSettings.end()) {
+            Config::dim = it->second;
         }
-    };
+    }
 
     // Per-frame rendering
     HOOK_DEFINE_TRAMPOLINE(TaskPvGameDisp_Hook) {
@@ -90,7 +81,6 @@ namespace Dimming {
         s_DrawRect    = reinterpret_cast<DrawRect_t>(base + ADDR_DRAW_RECT);
         s_CurrentPvID = reinterpret_cast<const int32_t*>(base + ADDR_CURRENT_PV_ID);
 
-        TaskPvGameInit_Hook::InstallAtOffset(ADDR_TASK_PV_GAME_INIT);
         TaskPvGameDisp_Hook::InstallAtOffset(ADDR_TASK_PV_GAME_DISP);
     }
 

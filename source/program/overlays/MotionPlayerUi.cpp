@@ -484,19 +484,22 @@ static const BoneGuideItem s_boneGuideList[] = {
     { 178, "178-181", "XYZ dimensions" }
 };
 
-static int s_bonePage = 0; // 0 = Page 1, 1 = Page 2
+static int s_bonePage = 0;
 
 static void DrawBonesGuideOverlay(const ImVec2& parentPos, const ImVec2& parentSize) {
-    const float helpW = 240.0f;
-    const float helpH = std::max(parentSize.y, 380.0f);
+    ImGuiIO& io = ImGui::GetIO();
+    float s = io.DisplaySize.y / 720.0f;
 
-    float helpX = parentPos.x + parentSize.x + 6.0f;
+    const float helpW = 240.0f * s;
+    const float helpH = std::max(parentSize.y, 380.0f * s);
+
+    float helpX = parentPos.x + parentSize.x + 6.0f * s;
     float helpY = parentPos.y;
 
-    if (helpX + helpW > 1272.0f) {
-        helpX = parentPos.x - helpW - 6.0f;
+    if (helpX + helpW > io.DisplaySize.x - (8.0f * s)) {
+        helpX = parentPos.x - helpW - 6.0f * s;
     }
-    if (helpX < 8.0f) helpX = 8.0f;
+    if (helpX < 8.0f * s) helpX = 8.0f * s;
 
     ImGui::SetNextWindowPos(ImVec2(helpX, helpY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(helpW, helpH), ImGuiCond_Always);
@@ -509,7 +512,7 @@ static void DrawBonesGuideOverlay(const ImVec2& parentPos, const ImVec2& parentS
                              ImGuiWindowFlags_NoScrollWithMouse |
                              ImGuiWindowFlags_NoSavedSettings;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * s, 8.0f * s));
 
     if (ImGui::Begin("Bones Guide###MotionBonesGuideWindow", &s_showBoneHelp, flags)) {
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
@@ -519,25 +522,24 @@ static void DrawBonesGuideOverlay(const ImVec2& parentPos, const ImVec2& parentS
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Split 25 items across 2 pages: Page 1 = 0..12, Page 2 = 13..24
         int startIdx = (s_bonePage == 0) ? 0 : 13;
         int endIdx   = (s_bonePage == 0) ? 13 : 25;
 
-        const float colBtnW = 60.0f;
-        const float textAvailW = helpW - 16.0f - colBtnW - 8.0f;
+        const float colBtnW = 60.0f * s;
+        const float textAvailW = helpW - (16.0f * s) - colBtnW - (8.0f * s);
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 2.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * s, 1.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * s, 2.5f * s));
 
         for (int i = startIdx; i < endIdx; i++) {
             const auto& item = s_boneGuideList[i];
             ImGui::PushID(item.range);
 
-            if (ImGui::Button(item.range, ImVec2(colBtnW, 18.0f))) {
+            if (ImGui::Button(item.range, ImVec2(colBtnW, 18.0f * s))) {
                 curmikupos = item.bone;
             }
 
-            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SameLine(0.0f, 6.0f * s);
 
             ImGui::BeginGroup();
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textAvailW);
@@ -550,20 +552,20 @@ static void DrawBonesGuideOverlay(const ImVec2& parentPos, const ImVec2& parentS
 
         ImGui::PopStyleVar(2);
 
-        ImGui::SetCursorPosY(helpH - 30.0f);
+        ImGui::SetCursorPosY(helpH - (30.0f * s));
         ImGui::Separator();
 
-        const float navBtnW = 26.0f;
-        if (ImGui::Button("<##PrevBonePage", ImVec2(navBtnW, 19.0f))) {
+        const float navBtnW = 26.0f * s;
+        if (ImGui::Button("<##PrevBonePage", ImVec2(navBtnW, 19.0f * s))) {
             if (s_bonePage > 0) s_bonePage--;
         }
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX((helpW - 65.0f) * 0.5f);
+        ImGui::SetCursorPosX((helpW - (65.0f * s)) * 0.5f);
         ImGui::Text("Page %d / 2", s_bonePage + 1);
 
-        ImGui::SameLine(helpW - navBtnW - 8.0f);
-        if (ImGui::Button(">##NextBonePage", ImVec2(navBtnW, 19.0f))) {
+        ImGui::SameLine(helpW - navBtnW - (8.0f * s));
+        if (ImGui::Button(">##NextBonePage", ImVec2(navBtnW, 19.0f * s))) {
             if (s_bonePage < 1) s_bonePage++;
         }
 
@@ -574,32 +576,38 @@ static void DrawBonesGuideOverlay(const ImVec2& parentPos, const ImVec2& parentS
 }
 
 void DrawRecorderHeader() {
+    float s = ImGui::GetIO().DisplaySize.y / 720.0f;
     ImGui::Separator();
 
+    // Auto-calculate height with 0.0f to prevent squished buttons
     if (g_recordState == 0) {
-        if (ImGui::Button("Record", ImVec2(75.0f, 24.0f))) {
+        if (ImGui::Button("Record", ImVec2(80.0f * s, 0.0f))) {
             g_recordState = 1;
             g_hasBaseSnapshot = false;
         }
         ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("IDLE");
     } else if (g_recordState == 1) {
-        if (ImGui::Button("Cancel", ImVec2(75.0f, 24.0f))) g_recordState = 0;
+        if (ImGui::Button("Cancel", ImVec2(80.0f * s, 0.0f))) g_recordState = 0;
         ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "ARMED");
     } else if (g_recordState == 2) {
-        if (ImGui::Button("Stop", ImVec2(75.0f, 24.0f))) {
+        if (ImGui::Button("Stop", ImVec2(80.0f * s, 0.0f))) {
             g_recordState = 3;
         }
         ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "REC (%d)", g_recordFrameCounter);
     } else if (g_recordState == 3) {
-        if (ImGui::Button("Drop", ImVec2(50.0f, 24.0f))) g_recordState = 0;
+        if (ImGui::Button("Drop", ImVec2(55.0f * s, 0.0f))) g_recordState = 0;
         ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "PENDING");
 
         ImGui::SameLine();
-        ImGui::PushItemWidth(125.0f);
+        ImGui::PushItemWidth(140.0f * s);
 
         if (VirtualKeyboard::ShouldFocusTarget()) {
             ImGui::SetKeyboardFocusHere(0);
@@ -621,30 +629,32 @@ void DrawRecorderHeader() {
 
     ImGui::Spacing();
     if (g_recordState == 3) {
-        if (ImGui::Button("Save Motion", ImVec2(90.0f, 24.0f))) {
+        if (ImGui::Button("Save Motion", ImVec2(95.0f * s, 0.0f))) {
             SaveDumpToSD(s_motionFileName);
             g_recordState = 0;
             RefreshFiles();
         }
     } else {
         ImGui::BeginDisabled();
-        ImGui::Button("Save Motion", ImVec2(90.0f, 24.0f));
+        ImGui::Button("Save Motion", ImVec2(95.0f * s, 0.0f));
         ImGui::EndDisabled();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Motion Player", ImVec2(100.0f, 24.0f))) {
+    if (ImGui::Button("Motion Player", ImVec2(105.0f * s, 0.0f))) {
         g_showUltimatePlayer = true;
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Refresh", ImVec2(60.0f, 24.0f))) {
+    if (ImGui::Button("Refresh", ImVec2(65.0f * s, 0.0f))) {
         RefreshFiles();
     }
 }
 
 void DrawMotionControlWindow() {
     if (!g_showMotionControlWindow) return;
+
+    float s = ImGui::GetIO().DisplaySize.y / 720.0f;
 
     ImGui::SetNextWindowBgAlpha(0.85f);
     std::string title = "Motion Control" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###MotionControlWindow";
@@ -662,52 +672,57 @@ void DrawMotionControlWindow() {
             curmikupos = g_maxBones - 1;
         }
 
-        ImGui::PushItemWidth(140.0f);
+        // Clean inputs without step buttons crushing layout
+        ImGui::PushItemWidth(150.0f * s);
         ImGui::InputInt("Total Bones", &displayBones, 0, 0, ImGuiInputTextFlags_ReadOnly);
-        ImGui::InputInt("Current Bone", &curmikupos);
+        ImGui::InputInt("Current Bone", &curmikupos, 1, 10);
         ImGui::PopItemWidth();
 
         ImGui::Checkbox("Override Params", &mikuoverride);
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - 76.0f);
-        if (ImGui::Button(s_showBoneHelp ? "Help [X]" : "Help (?)", ImVec2(76.0f, 0.0f))) {
+        ImGui::SameLine(0.0f, 16.0f * s);
+
+        if (ImGui::Button(s_showBoneHelp ? "Help [X]" : "Help (?)", ImVec2(76.0f * s, 0.0f))) {
             s_showBoneHelp = !s_showBoneHelp;
         }
 
         ImGui::Checkbox("Show all params", &mikushowall);
 
+        // a3, a4, a5: step=0 ensures clean visible text fields without +/- crowding
         if (mikuposptrcounter >= 0) {
-            ImGui::PushItemWidth(68.0f);
-            ImGui::InputInt("a3", &mikupos_a3[curmikupos]); ImGui::SameLine();
-            ImGui::InputInt("a4", &mikupos_a4[curmikupos]); ImGui::SameLine();
-            ImGui::InputInt("a5", &mikupos_a5[curmikupos]);
+            float paramFieldW = 70.0f * s;
+            ImGui::PushItemWidth(paramFieldW);
+            ImGui::InputInt("a3", &mikupos_a3[curmikupos], 0, 0); ImGui::SameLine();
+            ImGui::InputInt("a4", &mikupos_a4[curmikupos], 0, 0); ImGui::SameLine();
+            ImGui::InputInt("a5", &mikupos_a5[curmikupos], 0, 0);
             ImGui::PopItemWidth();
         }
 
+        // Two columns of bone parameters with dynamic gap preventing overlaps
         if (mikuposptrcounter >= 0 && curmikupos < 9999) {
             float* m1 = mikupos_a1[curmikupos];
             float* m2 = mikupos_a2[curmikupos];
             int start = mikushowall ? 0 : 15;
+            float dragW = 120.0f * s;
 
             for (int i = start; i <= 23; i++) {
-                ImGui::PushItemWidth(125.0f);
-
                 if (m1) {
                     char lbl1[32]; snprintf(lbl1, 32, "##a1_%d", i);
                     ImGui::Text("%2d", i);
-                    ImGui::SameLine(0.0f, 4.0f);
+                    ImGui::SameLine(0.0f, 4.0f * s);
+                    ImGui::PushItemWidth(dragW);
                     ImGui::DragFloat(lbl1, &m1[i], 0.01f);
+                    ImGui::PopItemWidth();
                 }
 
                 if (m2) {
-                    ImGui::SameLine(164.0f);
+                    ImGui::SameLine(0.0f, 14.0f * s);
                     char lbl2[32]; snprintf(lbl2, 32, "##a2_%d", i);
                     ImGui::Text("-%d", i);
-                    ImGui::SameLine(0.0f, 4.0f);
+                    ImGui::SameLine(0.0f, 4.0f * s);
+                    ImGui::PushItemWidth(dragW);
                     ImGui::DragFloat(lbl2, &m2[i], 0.01f);
+                    ImGui::PopItemWidth();
                 }
-
-                ImGui::PopItemWidth();
             }
         }
 
@@ -723,6 +738,8 @@ void DrawMotionControlWindow() {
 void DrawUltimatePlayerWindow() {
     if (!g_showUltimatePlayer) return;
 
+    float s = ImGui::GetIO().DisplaySize.y / 720.0f;
+
     ImGui::SetNextWindowBgAlpha(0.85f);
     std::string title = "Ultimate Motion Player" + std::string(ImGui::g_imguiHasFocus ? "" : " [GAME HAS FOCUS]") + "###UltimateMotionPlayerWindow";
 
@@ -730,7 +747,7 @@ void DrawUltimatePlayerWindow() {
         ImGui::GetWindowDrawList()->PushClipRectFullScreen();
 
         ImGui::Checkbox("Enable Playback", &g_ultimateEnable);
-        ImGui::SameLine(170.0f);
+        ImGui::SameLine(0.0f, 20.0f * s);
         if (ImGui::Button("+ Add Slot")) {
             g_slots.push_back(DynamicSlot());
         }
@@ -743,7 +760,7 @@ void DrawUltimatePlayerWindow() {
             ImGui::Checkbox("##en", &slot.enabled);
             ImGui::SameLine();
 
-            ImGui::PushItemWidth(180.0f);
+            ImGui::PushItemWidth(180.0f * s);
             if (g_allFiles.empty()) {
                 ImGui::BeginDisabled();
                 if (ImGui::BeginCombo("##file", "No dumps")) ImGui::EndCombo();
@@ -769,7 +786,7 @@ void DrawUltimatePlayerWindow() {
 
             ImGui::SameLine();
 
-            ImGui::PushItemWidth(150.0f);
+            ImGui::PushItemWidth(150.0f * s);
             float maxSliderFrame = (slot.dump.hasData && slot.dump.maxFrame > 0) ? (float)slot.dump.maxFrame : 100.0f;
             ImGui::SliderFloat("Frame##frm", &slot.currentFrame, 0.0f, maxSliderFrame, "%.1f");
             ImGui::PopItemWidth();

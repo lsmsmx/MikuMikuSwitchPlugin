@@ -39,9 +39,10 @@ namespace PostProcessUi {
         float curSat     = (Config::saturateCoef >= 0.0f) ? Config::saturateCoef  : liveSat;
         float curPse     = (Config::exposurePse >= 0.0f)  ? Config::exposurePse   : livePse;
 
-        // Anchor window to bottom-left corner with 12px margin
         ImVec2 screenSize = ImGui::GetIO().DisplaySize;
-        ImGui::SetNextWindowPos(ImVec2(12.0f, screenSize.y - 12.0f), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+        float s = screenSize.y / 720.0f;
+
+        ImGui::SetNextWindowPos(ImVec2(12.0f * s, screenSize.y - (12.0f * s)), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
         ImGui::SetNextWindowBgAlpha(0.85f);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
@@ -50,10 +51,10 @@ namespace PostProcessUi {
                                  ImGuiWindowFlags_NoMove |
                                  ImGuiWindowFlags_NoSavedSettings;
 
-        // Compact UI styling
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(7.0f, 6.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f, 4.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 5.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(7.0f * s, 6.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f * s, 4.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f * s, 5.0f * s));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f * s);
 
         if (ImGui::Begin("###PostProcessHUDOverlay", nullptr, flags)) {
             ImGui::GetWindowDrawList()->PushClipRectFullScreen();
@@ -63,12 +64,11 @@ namespace PostProcessUi {
 
             ImGui::SameLine();
 
-            const float btnWidth = 20.0f;
+            const float btnWidth = 20.0f * s;
             float targetRightX = ImGui::GetWindowContentRegionMax().x - btnWidth;
             if (targetRightX > ImGui::GetCursorPosX()) {
                 ImGui::SetCursorPosX(targetRightX);
             }
-
 
             if (ImGui::Button("R", ImVec2(btnWidth, 0.0f))) {
                 Config::toneMapMethod = -1;
@@ -94,7 +94,7 @@ namespace PostProcessUi {
 
             ImGui::Separator();
 
-            const float itemWidth = 110.0f;
+            const float itemWidth = 110.0f * s;
 
             // 1. Tone Map Method
             const char* toneNames[] = { "YCC EXP", "RGB LIN", "RGB LIN2", "OFF" };
@@ -165,7 +165,7 @@ namespace PostProcessUi {
         }
         ImGui::End();
 
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar(4);
     }
 
 } // namespace PostProcessUi

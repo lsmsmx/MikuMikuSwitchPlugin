@@ -15,7 +15,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Rewritten memory allocators to prevent from crashing
 - 95% New Classics Port (USE ORIGINAL ASSETS FROM PC VERSION)
 - DEBUG AND FREECAM
-- MLAA, TAA, leaf effect restoration (Sega bugs)
+- MLAA, TAA, leaf effect restoration, bloom/glare fixed for higher res (Sega bugs)
 - Spr_set_back Sega bug fix (rescaling bg image in pv)
 - Full 2D and NoMovie modes
 - Attract theater mode restoration (restores absent buttons) missing files https://gamebanana.com/mods/728835
@@ -27,6 +27,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - Randomizer mode partial and full (NC supported)
 - Song searchbar through ImGUI
 - Config file with lots of options to adjust, graphical, gameplay etc, e.g. optable toon back, no logos
+- Resolution presets
 - Song ID limit up to (2^32 - 2)
 - Increased Limit Of Spritesets to be loaded from 4096 to 32768
 - Subsurface Scattering restoration
