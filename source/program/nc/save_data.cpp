@@ -12,6 +12,7 @@
 #include "save_data.hpp"
 
 #include <nn/fs.hpp>
+#include "../SaveStream.hpp"
 #include "Config.hpp"
 
 #define SCORE_KEY(id, st) (id | (static_cast<uint64_t>(st) << 32))
@@ -83,6 +84,25 @@ namespace nc
 	}
 
 	ConfigSet* GetConfigSet() { return FindConfigSet(GetConfigSetID(), true); }
+
+	bool SongHasStyle(int32_t pv, int32_t style)
+	{
+		// Arcade is the engine's own score table (mirrored in DivaModData.dat), so
+		// it never needs shadow storage, and Max is not a style at all.
+		if (style <= GameStyle_Arcade || style >= GameStyle_Max)
+			return false;
+
+		const db::SongEntry* song = db::FindSongEntry(pv);
+		if (song == nullptr)
+			return false;
+
+		for (size_t edition = 0; edition < MaxEditionCount; edition++)
+			for (size_t difficulty = 0; difficulty < MaxDifficultyCount; difficulty++)
+				if (song->FindChart(static_cast<int32_t>(difficulty), static_cast<int32_t>(edition), style) != nullptr)
+					return true;
+
+		return false;
+	}
 }
 
 struct SaveDataFile
@@ -153,42 +173,98 @@ struct SaveDataFile
 	}
 };
 
+// The whole header block is read/written as one unit, so it has to be exactly
+// MaxHeaderSize bytes on disk.
+static_assert(sizeof(SaveDataFile) == MaxHeaderSize, "SaveDataFile header block size mismatch.");
+
+// Ten zeroed difficulty slots carry nothing: FindOrCreateDifficultyScore builds
+// an empty entry on demand, so a record that is absent reads back exactly like
+// one that is present and zero.
+static bool IsEmptyRecord(const std::array<DifficultyScore, 10>& record)
+{
+	for (const DifficultyScore& diff : record)
+		for (uint8_t byte : diff._data)
+			if (byte != 0)
+				return false;
+
+	return true;
+}
+
+// Storage that can never be read back. Records for a PV the DB does not know are
+// *kept*: a mod that is disabled or missing this session must not cost the player
+// its console/mixed data, so only a PV the DB knows -- without a chart in that
+// style -- counts as junk.
+static bool IsJunkRecord(int32_t pv, int32_t style, const std::array<DifficultyScore, 10>& record)
+{
+	if (IsEmptyRecord(record))
+		return true;
+
+	if (!db::DbReady())
+		return false;
+
+	if (db::FindSongEntry(pv) == nullptr)
+		return false;
+
+	return !nc::SongHasStyle(pv, style);
+}
+
 void nc::LoadSaveDataNC() {
 	std::scoped_lock lock(g_SaveMtx);
-	nn::fs::FileHandle h;
 
-	if (R_SUCCEEDED(nn::fs::OpenFile(&h, NC_SAVE_PATH, nn::fs::OpenMode_Read))) {
-		int64_t buffer_size = 0;
-		nn::fs::GetFileSize(&buffer_size, h);
+	savestream::Reader reader;
+	if (!reader.Open(NC_SAVE_PATH))
+		return;
 
-		if (buffer_size > 0) {
-			std::vector<uint8_t> buffer(buffer_size);
-			nn::fs::ReadFile(h, 0, buffer.data(), buffer_size);
+	if (reader.Size() < static_cast<int64_t>(MaxHeaderSize)) {
+		reader.Close();
+		return;
+	}
 
-			const SaveDataFile* data = reinterpret_cast<const SaveDataFile*>(buffer.data());
-			if (data->IsValid() && !data->IsVersionUnsupported()) {
-				for (size_t i = 0; i < data->header.config_set_count; i++) {
-					const ConfigSet& set = data->GetConfigSets()[i];
-					config_sets[set.id] = set;
-				}
+	SaveDataFile data;
+	if (!reader.Read(&data, sizeof(SaveDataFile))) {
+		reader.Close();
+		return;
+	}
 
-				for (size_t i = 0; i < data->header.score_ex_count; i++) {
-					const SaveDataFile::ScoreEx& score = data->GetScores()[i];
-					auto& score_new = scores[SCORE_KEY(score.pv, score.style)];
-					std::memcpy(score_new.data(), score.difficulties, sizeof(DifficultyScore) * 10);
-				}
+	const SaveDataFile::Header& header = data.header;
 
-				if (data->header.shared_data_count > 0)
-					shared_data = *data->GetSharedData();
+	if (data.IsValid() && !data.IsVersionUnsupported()) {
+		for (size_t i = 0; i < header.config_set_count; i++) {
+			ConfigSet set;
+			if (!reader.Read(&set, sizeof(ConfigSet)))
+				break;
 
-				if (data->header.version_major == 1 && data->header.version_minor == 3) {
-					if (data->GetSharedData()->sound_prio == 1)
-						shared_data.sound_prio = 0;
-				}
+			config_sets[set.id] = set;
+		}
+
+		for (size_t i = 0; i < header.score_ex_count; i++) {
+			int32_t pv = 0;
+			int32_t style = 0;
+			if (!reader.Read(&pv, sizeof(pv)) || !reader.Read(&style, sizeof(style)))
+				break;
+
+			const uint64_t key = SCORE_KEY(pv, style);
+			auto& score_new = scores[key];
+			if (!reader.Read(score_new.data(), sizeof(DifficultyScore) * 10))
+				break;
+
+			// Junk is dropped here rather than kept in RAM until the next save.
+			if (IsJunkRecord(pv, style, score_new))
+				scores.erase(key);
+		}
+
+		if (header.shared_data_count > 0) {
+			SharedData shared;
+			if (reader.Read(&shared, sizeof(SharedData))) {
+				shared_data = shared;
+
+				if (header.version_major == 1 && header.version_minor == 3 && shared_data.sound_prio == 1)
+					shared_data.sound_prio = 0;
 			}
 		}
-		nn::fs::CloseFile(h);
 	}
+
+	reader.Close();
 }
 
 void nc::SaveSaveDataNC() {
@@ -196,44 +272,37 @@ void nc::SaveSaveDataNC() {
 	if (config_sets.empty() && scores.empty())
 		return;
 
+	// Drop storage that can never be read back, before the size is computed:
+	// empty slots, and records for a PV the DB knows but which has no chart in
+	// that style. This is what keeps the file to the PVs that really have
+	// console/mixed charts instead of one record per PV per style.
+	for (auto it = scores.begin(); it != scores.end(); )
+	{
+		const int32_t pv = static_cast<int32_t>(it->first & 0xFFFFFFFF);
+		const int32_t style = static_cast<int32_t>(it->first >> 32);
+
+		if (IsJunkRecord(pv, style, it->second))
+			it = scores.erase(it);
+		else
+			++it;
+	}
+
+	if (config_sets.empty() && scores.empty())
+	{
+		// Nothing worth keeping; do not leave the old file behind.
+		nn::fs::DeleteFile(NC_SAVE_PATH);
+		return;
+	}
+
 	SaveDataFile::Header header;
 	header.config_set_count = config_sets.size();
 	header.score_ex_count = scores.size();
 	header.shared_data_count = 1;
 
-	size_t total_size = MaxHeaderSize +
+	const size_t total_size = MaxHeaderSize +
 		config_sets.size() * sizeof(ConfigSet) +
 		scores.size() * sizeof(SaveDataFile::ScoreEx) +
 		sizeof(SharedData);
-
-	std::vector<uint8_t> buffer(total_size);
-
-	size_t pos = 0;
-	auto writeData = [&](const void* src, size_t size) {
-		if (pos + size <= buffer.size()) {
-			std::memcpy(&buffer[pos], src, size);
-			pos += size;
-		}
-	};
-
-	writeData(&header, sizeof(SaveDataFile::Header));
-	pos = MaxHeaderSize;
-
-	for (const auto& [id, set] : config_sets) {
-		ConfigSet setw = set;
-		setw.id = id;
-		writeData(&setw, sizeof(ConfigSet));
-	}
-
-	for (const auto& [key, value] : scores) {
-		int32_t pv = key & 0xFFFFFFFF;
-		int32_t style = key >> 32;
-		writeData(&pv, sizeof(int32_t));
-		writeData(&style, sizeof(int32_t));
-		writeData(value.data(), sizeof(DifficultyScore) * 10);
-	}
-
-	writeData(&shared_data, sizeof(SharedData));
 
 	nn::fs::CreateDirectory("ExlSD:/MikuMikuSwitchPlugin");
 	nn::fs::CreateDirectory("ExlSD:/MikuMikuSwitchPlugin/Save");
@@ -241,11 +310,33 @@ void nc::SaveSaveDataNC() {
 	nn::fs::DeleteFile(NC_SAVE_PATH);
 	nn::fs::CreateFile(NC_SAVE_PATH, total_size);
 
-	nn::fs::FileHandle h;
-	if (R_SUCCEEDED(nn::fs::OpenFile(&h, NC_SAVE_PATH, nn::fs::OpenMode_Write))) {
-		nn::fs::WriteFile(h, 0, buffer.data(), total_size, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
-		nn::fs::CloseFile(h);
+	savestream::Writer writer;
+	if (!writer.Open(NC_SAVE_PATH, total_size))
+		return;
+
+	// Header struct followed by zero padding up to MaxHeaderSize.
+	static const uint8_t zero_header[MaxHeaderSize - sizeof(SaveDataFile::Header)] = { };
+	writer.Write(&header, sizeof(SaveDataFile::Header));
+	writer.Write(zero_header, sizeof(zero_header));
+
+	for (const auto& [id, set] : config_sets) {
+		ConfigSet setw = set;
+		setw.id = id;
+		writer.Write(&setw, sizeof(ConfigSet));
 	}
+
+	for (const auto& [key, value] : scores) {
+		const int32_t pv = static_cast<int32_t>(key & 0xFFFFFFFF);
+		const int32_t style = static_cast<int32_t>(key >> 32);
+		writer.Write(&pv, sizeof(pv));
+		writer.Write(&style, sizeof(style));
+		writer.Write(value.data(), sizeof(DifficultyScore) * 10);
+	}
+
+	writer.Write(&shared_data, sizeof(SharedData));
+
+	writer.PadToEnd();
+	writer.Close();
 }
 
 // Fast shadow score cache
@@ -261,6 +352,17 @@ int32_t nc::GetCurrentStyleForSave() {
 		return state.nc_chart_entry.value().style;
 	}
 	return nc::GetSharedData().pv_sel_selected_style;
+}
+
+void* nc::GetScoreForCurrentStyle(int32_t pv, void* base_score) {
+	const int32_t style = GetCurrentStyleForSave();
+
+	// Console/Mixed only, and only for a PV that has a chart in that style:
+	// anything else belongs to the engine's own score table.
+	if (style != GameStyle_Arcade && SongHasStyle(pv, style))
+		return GetNCShadowScore(pv, style, base_score);
+
+	return base_score;
 }
 
 void* nc::GetNCShadowScore(int32_t id, int32_t style, void* base_score) {
@@ -327,8 +429,8 @@ void nc::SyncNCShadowScores() {
 		}
 	}
 }
-
+/*
 void nc::InstallSaveDataHooks()
 {
 	// Hook 0xcac90 disabled: GetNCShadowScore overrides buffer directly
-}
+}*/

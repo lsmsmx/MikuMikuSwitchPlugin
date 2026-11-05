@@ -48,17 +48,20 @@ namespace nc
 	int32_t GetConfigSetID();
 	ConfigSet* GetConfigSet();
 
+	// True only when this PV really has a chart in that style. A shadow record is
+	// per PV *and* style, but the style being the current one does not imply the
+	// PV has it: the game asks about every PV on its enumerate-all passes.
+	bool SongHasStyle(int32_t pv, int32_t style);
+
 	// Direct save/load methods
 	void LoadSaveDataNC();
 	void SaveSaveDataNC();
 
-	void InstallSaveDataHooks();
-
-	inline void init_save_data() {
-		InstallSaveDataHooks();
-	}
-
 	int32_t GetCurrentStyleForSave();
+	// Score storage the game should use for this PV: a Console/Mixed shadow when
+	// the PV actually has a chart in the current style, otherwise the engine's
+	// own score (which is where Arcade lives).
+	void* GetScoreForCurrentStyle(int32_t pv, void* base_score);
 	void* GetNCShadowScore(int32_t id, int32_t style, void* base_score);
 	void SyncNCShadowScores();
 }

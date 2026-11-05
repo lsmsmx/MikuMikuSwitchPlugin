@@ -85,6 +85,7 @@ static constexpr int64_t RUSH_INTRO_TICKS = 2567LL * TICKS_PER_MS;
 static bool    s_rush_active  = false;
 static bool    s_rush_looping = false;
 static int64_t s_rush_start_tick = 0;
+static int64_t s_last_log_ms = 0;
 
 static bool    s_link_active  = false;
 static bool    s_link_looping = false;
@@ -99,6 +100,31 @@ static inline int64_t GetLinkIntroTicks(const std::string& name) {
     if (name.find("scratch_l4") != std::string::npos) return 36008LL  * 19200LL / 48000LL;
     if (name.find("scratch_l5") != std::string::npos) return 35308LL  * 19200LL / 48000LL;
     return 0;
+}
+
+void SoundEffectManager::StartRushBackSE()
+{
+    if (s_rush_active) return;
+
+    s_rush_active  = true;
+    s_rush_looping = false;
+    s_rush_start_tick = nn::os::GetSystemTick().GetInt64Value();
+    s_last_log_ms = 0;
+
+    sound::PlaySoundEffect(QueueIndex, rush_on.c_str(), 1.0f);
+}
+
+void SoundEffectManager::EndRushBackSE(bool popped)
+{
+    s_rush_active  = false;
+    s_rush_looping = false;
+
+    SustainAudio::StopSlot(6);
+    sound::ReleaseCue(QueueIndex, rush_on.c_str(), popped);
+    sound::ReleaseCue(SoundEffectManager::SustainQueueIndex, rush_on.c_str(), true);
+
+    if (popped)
+        sound::PlaySoundEffect(QueueIndex, rush_off.c_str(), 1.0f);
 }
 
 void SoundEffectManager::StartLinkSE()

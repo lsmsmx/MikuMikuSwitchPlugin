@@ -17,6 +17,39 @@
 
 #define FIX(addr)           ((addr) - 0x100)
 
+/* The three NOPs below sit *after* the per-pv flag loads they were meant to
+   bypass:
+       ADDR_NOP_2  vaddr 0x5D1BE0  b    0x5D1CF0   } branch A of FUN_005d18e0
+       ADDR_NOP_4  vaddr 0x5D1BEC  cbz  w10, 0x5D1C30 } branch B
+       ADDR_NOP_3  vaddr 0x5D2A38  cbz  w8,  0x5D3018 } FUN_005d29a0
+   DivaModLoader does the other half on PC: its IfCheck patches replace the
+   load *and* the branch (`cmp [rdx+rax+0x340],0` + `jz` -> 14 nops falling into
+   the taken path; `cmp [rax],r9b` + `jnz` -> `90 90 90 EB` = jmp to the taken
+   path), so on PC the out-of-bounds load never executes. On console it still
+   does, and that load is what aborts for ids above 999:
+
+       diva_nx+0x5D29D4  ldrb w9, [x8, #840]     x8 = manager + id
+
+   The patches below are that missing half: at each flag load, branch to the
+   same "flag set" target the unpatched branch would take if the byte were
+   non-zero. That is also what the game does on an emulator, where the load
+   lands in mapped memory and reads a non-zero byte, which is why the same
+   pv_db behaves there and crashes on hardware. The id itself is never
+   touched, so the pv tree lookup at 0x5D1CEC (`cmp w8, [x9,#32]` against the
+   real id) and "SPR_SEL_PV%03d" keep working.
+
+   Addresses here are module-relative (vaddr == module offset), unlike the
+   FIX()-based constants above which are Ghidra-space. */
+#define ADDR_PV_IFCHK_SPRITE 0x5D29D4   /* ldrb w9,  [x8, #840]  -> 0x5D2A3C */
+#define ADDR_PV_IFCHK_A      0x5D1BD8   /* ldrb w9,  [x9, #840]  -> 0x5D1CB8 */
+#define ADDR_PV_IFCHK_B1     0x5D1BE8   /* ldrb w10, [x9, #840]  -> 0x5D1BF0 */
+#define ADDR_PV_IFCHK_B2     0x5D1BF4   /* ldrb w11, [x9, #2840] -> 0x5D1BFC */
+#define ADDR_PV_IFCHK_B3     0x5D1C04   /* ldrb w11, [x9, x11]   -> 0x5D1C0C */
+#define ADDR_PV_IFCHK_B4     0x5D1C14   /* ldrb w11, [x9, x11]   -> 0x5D1C1C */
+#define ADDR_PV_IFCHK_B5     0x5D1C24   /* ldrb w11, [x9, x11]   -> 0x5D1CB8 */
+
+#define PV_JUMP(site, target) (0x14000000u | ((((target) - (site)) >> 2) & 0x03FFFFFFu))
+
 #define ADDR_NOP_2    FIX(0x5D1CE0)
 #define ADDR_NOP_3    FIX(0x5D2B38)
 #define ADDR_NOP_4    FIX(0x5D1CEC)
@@ -222,6 +255,15 @@ void PvLoader::init() {
     exl::patch::CodePatcher(ADDR_NOP_2).Write<uint32_t>(0xD503201F);
     exl::patch::CodePatcher(ADDR_NOP_3).Write<uint32_t>(0xD503201F);
     exl::patch::CodePatcher(ADDR_NOP_4).Write<uint32_t>(0xD503201F);
+
+    // Out-of-bounds flag loads (see the comment on ADDR_PV_IFCHK_* above).
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_SPRITE).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_SPRITE, 0x5D2A3C));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_A).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_A, 0x5D1CB8));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_B1).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_B1, 0x5D1BF0));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_B2).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_B2, 0x5D1BFC));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_B3).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_B3, 0x5D1C0C));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_B4).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_B4, 0x5D1C1C));
+    exl::patch::CodePatcher(ADDR_PV_IFCHK_B5).Write<uint32_t>(PV_JUMP(ADDR_PV_IFCHK_B5, 0x5D1CB8));
 
     // 32-bit Truncation Patches
     exl::patch::CodePatcher(FIX(0x0085CA74)).Write<uint32_t>(0x12800008);

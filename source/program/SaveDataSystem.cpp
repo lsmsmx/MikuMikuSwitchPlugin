@@ -13,6 +13,7 @@
 #include "ScoreData.hpp"
 #include "SaveDataSystem.hpp"
 #include "nc/save_data.hpp"
+#include "SaveStream.hpp"
 #include "logger.hpp"
 
 #define SCORE_SIZE          0x11F4
@@ -102,123 +103,131 @@ void DoForceRegister(int32_t id, void* ptr) {
 // =========================================================
 // FILE SYSTEM
 // =========================================================
+// Store one record read from disk. Overwrites the pooled entry when the id is
+// already loaded instead of appending a fresh copy: pushing every time made each
+// load grow g_modPool by the whole score list (~6 MB), and left pointers the game
+// had already been handed registered against stale entries.
+static void StoreScore(const Score& s) {
+    Score* dst = nullptr;
+
+    if (auto it = g_scoreMap.find(s.pvId); it != g_scoreMap.end()) {
+        dst = it->second;
+        std::memcpy(dst, &s, sizeof(Score));
+    }
+    else {
+        g_modPool.push_back(s);
+        dst = &g_modPool.back();
+        g_scoreMap[s.pvId] = dst;
+    }
+
+    DoForceRegister(s.pvId, dst);
+}
+
 void LoadSD() {
     std::scoped_lock lock(g_SaveMtx);
-    nn::fs::FileHandle h;
 
-    if (R_SUCCEEDED(nn::fs::OpenFile(&h, SAVE_PATH, nn::fs::OpenMode_Read))) {
-        int64_t sz = 0;
-        nn::fs::GetFileSize(&sz, h);
+    savestream::Reader reader;
+    if (!reader.Open(SAVE_PATH))
+        return;
 
-        if (sz > 0) {
-            std::vector<uint8_t> buf(sz);
-            nn::fs::ReadFile(h, 0, buf.data(), sz);
+    const int64_t sz = reader.Size();
+    bool isNewFormat = false;
 
-            bool isNewFormat = false;
-            if (sz >= (int64_t)sizeof(SaveDataEx)) {
-                SaveDataEx* header = reinterpret_cast<SaveDataEx*>(buf.data());
-                if (header->version == SaveDataEx::MAX_VERSION && header->headerSize == sizeof(SaveDataEx)) {
-                    isNewFormat = true;
-                    size_t offset = header->headerSize;
+    if (sz >= (int64_t)sizeof(SaveDataEx)) {
+        SaveDataEx header = { };
+        if (reader.Read(&header, sizeof(header))) {
+            if (header.version == SaveDataEx::MAX_VERSION && header.headerSize == sizeof(SaveDataEx)) {
+                isNewFormat = true;
 
-                    // Read Scores
-                    for (uint32_t i = 0; i < header->scoreCount; i++) {
-                        Score s;
-                        std::memcpy(&s, buf.data() + offset, sizeof(Score));
-                        offset += sizeof(Score);
-
-                        g_modPool.push_back(s);
-                        g_scoreMap[s.pvId] = &g_modPool.back();
-                        DoForceRegister(s.pvId, g_scoreMap[s.pvId]);
-                    }
-
-                    // Read Modules
-                    for (uint32_t i = 0; i < header->moduleCount; i++) {
-                        ModuleEx m;
-                        std::memcpy(&m, buf.data() + offset, sizeof(ModuleEx));
-                        offset += sizeof(ModuleEx);
-                        g_moduleMap[m.moduleId] = m.module;
-                    }
-
-                    // Read CstmItems
-                    for (uint32_t i = 0; i < header->cstmItemCount; i++) {
-                        CstmItemEx c;
-                        std::memcpy(&c, buf.data() + offset, sizeof(CstmItemEx));
-                        offset += sizeof(CstmItemEx);
-                        g_cstmItemMap[c.cstmItemId] = c.cstmItem;
-                    }
-                }
-            }
-
-            // Legacy save data migration
-            if (!isNewFormat) {
-                int count = (int)(sz / SCORE_SIZE);
-                for (int i = 0; i < count; i++) {
+                // Read Scores
+                for (uint32_t i = 0; i < header.scoreCount; i++) {
                     Score s;
-                    std::memcpy(&s, buf.data() + (i * SCORE_SIZE), SCORE_SIZE);
-                    if (s.pvId > 0) {
-                        g_modPool.push_back(s);
-                        g_scoreMap[s.pvId] = &g_modPool.back();
-                        DoForceRegister(s.pvId, g_scoreMap[s.pvId]);
-                    }
+                    if (!reader.Read(&s, sizeof(Score)))
+                        break;
+
+                    StoreScore(s);
+                }
+
+                // Read Modules
+                for (uint32_t i = 0; i < header.moduleCount; i++) {
+                    ModuleEx m;
+                    if (!reader.Read(&m, sizeof(ModuleEx)))
+                        break;
+
+                    g_moduleMap[m.moduleId] = m.module;
+                }
+
+                // Read CstmItems
+                for (uint32_t i = 0; i < header.cstmItemCount; i++) {
+                    CstmItemEx c;
+                    if (!reader.Read(&c, sizeof(CstmItemEx)))
+                        break;
+
+                    g_cstmItemMap[c.cstmItemId] = c.cstmItem;
                 }
             }
         }
-        nn::fs::CloseFile(h);
     }
+
+    // Legacy save data migration
+    if (!isNewFormat) {
+        reader.Rewind();
+
+        Score s;
+        while (reader.Remaining() >= (int64_t)sizeof(Score)) {
+            if (!reader.Read(&s, sizeof(Score)))
+                break;
+
+            if (s.pvId > 0)
+                StoreScore(s);
+        }
+    }
+
+    reader.Close();
 }
 
 void SaveSD() {
     std::scoped_lock lock(g_SaveMtx);
     if (g_scoreMap.empty() && g_moduleMap.empty() && g_cstmItemMap.empty()) return;
 
-    size_t totalSize = sizeof(SaveDataEx)
+    const size_t totalSize = sizeof(SaveDataEx)
                      + (g_scoreMap.size() * sizeof(Score))
                      + (g_moduleMap.size() * sizeof(ModuleEx))
                      + (g_cstmItemMap.size() * sizeof(CstmItemEx));
 
-    std::vector<uint8_t> buffer;
-    buffer.reserve(totalSize);
-    buffer.resize(sizeof(SaveDataEx));
-
-    SaveDataEx* header = reinterpret_cast<SaveDataEx*>(buffer.data());
-    header->version = SaveDataEx::MAX_VERSION;
-    header->headerSize = sizeof(SaveDataEx);
-    header->scoreCount = static_cast<uint32_t>(g_scoreMap.size());
-    header->moduleCount = static_cast<uint32_t>(g_moduleMap.size());
-    header->cstmItemCount = static_cast<uint32_t>(g_cstmItemMap.size());
-
-    // Copy Scores
-    for (const auto& [id, sPtr] : g_scoreMap) {
-        size_t off = buffer.size();
-        buffer.resize(off + sizeof(Score));
-        std::memcpy(buffer.data() + off, sPtr, sizeof(Score));
-    }
-
-    // Copy Modules
-    for (const auto& [id, mod] : g_moduleMap) {
-        size_t off = buffer.size();
-        buffer.resize(off + sizeof(ModuleEx));
-        ModuleEx mEx = { id, mod };
-        std::memcpy(buffer.data() + off, &mEx, sizeof(ModuleEx));
-    }
-
-    // Copy CstmItems
-    for (const auto& [id, cstm] : g_cstmItemMap) {
-        size_t off = buffer.size();
-        buffer.resize(off + sizeof(CstmItemEx));
-        CstmItemEx cEx = { id, cstm };
-        std::memcpy(buffer.data() + off, &cEx, sizeof(CstmItemEx));
-    }
+    SaveDataEx header = { };
+    header.version = SaveDataEx::MAX_VERSION;
+    header.headerSize = sizeof(SaveDataEx);
+    header.scoreCount = static_cast<uint32_t>(g_scoreMap.size());
+    header.moduleCount = static_cast<uint32_t>(g_moduleMap.size());
+    header.cstmItemCount = static_cast<uint32_t>(g_cstmItemMap.size());
 
     nn::fs::DeleteFile(SAVE_PATH);
-    if (R_SUCCEEDED(nn::fs::CreateFile(SAVE_PATH, totalSize))) {
-        nn::fs::FileHandle h;
-        if (R_SUCCEEDED(nn::fs::OpenFile(&h, SAVE_PATH, nn::fs::OpenMode_Write))) {
-            nn::fs::WriteFile(h, 0, buffer.data(), totalSize, nn::fs::WriteOption::CreateOption(nn::fs::WriteOptionFlag_Flush));
-            nn::fs::CloseFile(h);
-        }
+    if (R_FAILED(nn::fs::CreateFile(SAVE_PATH, totalSize))) return;
+
+    savestream::Writer writer;
+    if (!writer.Open(SAVE_PATH, totalSize)) return;
+
+    writer.Write(&header, sizeof(header));
+
+    // Scores
+    for (const auto& [id, sPtr] : g_scoreMap)
+        writer.Write(sPtr, sizeof(Score));
+
+    // Modules
+    for (const auto& [id, mod] : g_moduleMap) {
+        ModuleEx mEx = { id, mod };
+        writer.Write(&mEx, sizeof(ModuleEx));
     }
+
+    // CstmItems
+    for (const auto& [id, cstm] : g_cstmItemMap) {
+        CstmItemEx cEx = { id, cstm };
+        writer.Write(&cEx, sizeof(CstmItemEx));
+    }
+
+    writer.PadToEnd();
+    writer.Close();
 }
 
 // =========================================================
@@ -258,12 +267,11 @@ HOOK_DEFINE_TRAMPOLINE(FindOrCreateScoreHook) {
             }
         }
 
-        int32_t style = nc::GetCurrentStyleForSave();
-        if (style != 0) {
-            return nc::GetNCShadowScore(id, style, baseScore);
-        }
-
-        return baseScore;
+        // Console/Mixed shadow when this PV has a chart in the current style,
+        // otherwise the engine's own score. Deciding here (rather than on "the
+        // style is not Arcade") is what stops a record being created for every PV
+        // on the game's enumerate-all passes.
+        return nc::GetScoreForCurrentStyle(id, baseScore);
     }
 };
 
@@ -285,15 +293,11 @@ HOOK_DEFINE_TRAMPOLINE(FindScoreHook) {
             baseScore = Orig(mgr, id);
         }
 
-        int32_t style = nc::GetCurrentStyleForSave();
-        if (style != 0) {
-            if (baseScore) {
-                return nc::GetNCShadowScore(id, style, baseScore);
-            }
+        if (!baseScore) {
             return nullptr;
         }
 
-        return baseScore;
+        return nc::GetScoreForCurrentStyle(id, baseScore);
     }
 };
 

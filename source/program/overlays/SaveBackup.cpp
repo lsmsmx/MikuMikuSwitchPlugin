@@ -22,6 +22,14 @@ static const char* kBackupBaseDir  = "ExlSD:/MikuMikuSwitchPlugin/Backups";
 static const char* kSaveDirPrimary = "ExlSD:/Save";
 static const char* kSaveDirPlugin  = "ExlSD:/MikuMikuSwitchPlugin/Save";
 
+// The plugin keeps its own save files (DivaModData.dat, NewClassics.dat) in a
+// second folder that ResolveSaveDir() does not return, so a backup of the
+// game's save data alone misses them entirely.  They go into a subfolder of the
+// backup rather than at its root, so that restoring the root tree into the
+// game's save folder cannot drop them in the wrong place; a backup without this
+// subfolder is simply an older one and is restored as before.
+static const char* kPluginBackupSubdir = "PluginSave";
+
 static std::vector<std::string> s_backupList;
 static int  s_selectedBackupIdx = -1;
 static int  s_currentPage       = 0;
@@ -104,6 +112,15 @@ static std::string GenerateBackupFolderName() {
     return std::string(buf);
 }
 
+static bool DirectoryExists(const char* path) {
+    nn::fs::DirectoryHandle dir;
+    if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, path, 1))) {
+        nn::fs::CloseDirectory(dir);
+        return true;
+    }
+    return false;
+}
+
 static void EnsureDirectory(const char* path) {
     nn::fs::DirectoryHandle dir;
     if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, path, 1))) {
@@ -166,7 +183,8 @@ static bool CopySingleFile(const std::string& srcPath, const std::string& dstPat
     return true;
 }
 
-static bool CopyDirectoryTree(const std::string& srcDir, const std::string& dstDir) {
+static bool CopyDirectoryTree(const std::string& srcDir, const std::string& dstDir,
+                             const char* skipSubDirName = nullptr) {
     EnsureDirectory(dstDir.c_str());
 
     std::vector<std::string> files;
@@ -196,7 +214,8 @@ static bool CopyDirectoryTree(const std::string& srcDir, const std::string& dstD
         if (R_SUCCEEDED(nn::fs::OpenDirectory(&dir, srcDir.c_str(), 1))) {
             while (R_SUCCEEDED(nn::fs::ReadDirectory(&readCount, &entry, dir, 1)) && readCount > 0) {
                 std::string dname = entry.m_Name;
-                if (dname != "." && dname != "..") {
+                if (dname != "." && dname != ".." &&
+                    (skipSubDirName == nullptr || dname != skipSubDirName)) {
                     subDirs.push_back(dname);
                 }
             }
@@ -205,10 +224,26 @@ static bool CopyDirectoryTree(const std::string& srcDir, const std::string& dstD
     }
 
     for (const auto& dname : subDirs) {
-        CopyDirectoryTree(srcDir + "/" + dname, dstDir + "/" + dname);
+        CopyDirectoryTree(srcDir + "/" + dname, dstDir + "/" + dname, skipSubDirName);
     }
 
     return true;
+}
+
+// Called after the game's save tree has been copied to the root of the backup.
+// Skipped when ResolveSaveDir() already picked the plugin folder, in which case
+// the root tree *is* the plugin folder.
+static void CopyPluginSaveInto(const std::string& backupDir, const std::string& primaryDir) {
+    if (primaryDir == kSaveDirPlugin) return;
+    if (!DirectoryExists(kSaveDirPlugin)) return;
+    CopyDirectoryTree(kSaveDirPlugin, backupDir + "/" + kPluginBackupSubdir);
+}
+
+static void RestorePluginSaveFrom(const std::string& backupDir, const std::string& primaryDir) {
+    if (primaryDir == kSaveDirPlugin) return;
+    std::string src = backupDir + "/" + kPluginBackupSubdir;
+    if (!DirectoryExists(src.c_str())) return;
+    CopyDirectoryTree(src, kSaveDirPlugin);
 }
 
 static void DeleteDirectoryTree(const std::string& path) {
@@ -255,6 +290,7 @@ static void DoCreateBackup() {
     std::string dstPath = std::string(kBackupBaseDir) + "/" + folderName;
 
     if (CopyDirectoryTree(saveDir, dstPath)) {
+        CopyPluginSaveInto(dstPath, saveDir);
         s_statusMessage = "Created: " + folderName;
         RefreshBackupList();
     } else {
@@ -282,7 +318,8 @@ static void DoRestoreSelected() {
     std::string srcBackup = std::string(kBackupBaseDir) + "/" + s_backupList[s_selectedBackupIdx];
     std::string saveDir = ResolveSaveDir();
 
-    if (CopyDirectoryTree(srcBackup, saveDir)) {
+    if (CopyDirectoryTree(srcBackup, saveDir, kPluginBackupSubdir)) {
+        RestorePluginSaveFrom(srcBackup, saveDir);
         s_statusMessage = "Restored!";
     } else {
         s_statusMessage = "Restore Failed!";

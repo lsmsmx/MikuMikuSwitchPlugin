@@ -29,6 +29,10 @@
 
 extern void ResetJitLinks(); // Forward declaration from target.cpp
 
+namespace Dimming {
+    void OnPvGameInit();
+}
+
 // 1. TaskPvGameInit (0x64c910)
 HOOK_DEFINE_TRAMPOLINE(TaskPvGameInitHook) {
 	static bool Callback(uint64_t a1) {
@@ -62,7 +66,12 @@ HOOK_DEFINE_TRAMPOLINE(TaskPvGameInitHook) {
 		se_mgr.Init();
 
 		macro_state.sensivity = 1.0f - nc::GetSharedData().stick_sensitivity / 100.0f;
-		return Orig(a1);
+
+		bool ret = Orig(a1);
+
+		Dimming::OnPvGameInit();
+
+		return ret;
 	}
 };
 

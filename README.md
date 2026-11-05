@@ -16,12 +16,14 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 - 95% New Classics Port (USE ORIGINAL ASSETS FROM PC VERSION)
 - DEBUG AND FREECAM
 - MLAA, TAA, leaf effect restoration, bloom/glare fixed for higher res (Sega bugs)
+- USM VP9 codec Support, *most* PC mods support
 - Spr_set_back Sega bug fix (rescaling bg image in pv)
 - Full 2D and NoMovie modes
 - Attract theater mode restoration (restores absent buttons) missing files https://gamebanana.com/mods/728835
 - No Songs limit, saving scores and modules and custom items in external savedata
 - Touch to mouse, touch to flicks/stars/sliders for pv game
 - Keyboard mode
+- Thumbnail loader
 - Skip Logos patch
 - Autoplay mode (NC supported)
 - Randomizer mode partial and full (NC supported)
@@ -59,7 +61,7 @@ Forked specifically for Hatsune Miku Project Diva Megamix!
 # Instructions
 - External save file (for NC too) is located in sdmc:/MikuMikuSwitchPlugin/Save/
 - mod_str_array.toml can be placed in sdmc:/MikuMikuSwitchPlugin/lang2/folder. Apparently you can also use game dlc prefixes, idea by Dandy Bleat. But with new mods support, just don't touch the location of already existing mod specific mod_str_array.toml and enjoy names
-- Drop your mods in sdmc:/atmosphere/contents/TitleID/romfs/mods (just to make sure, you still have to convert usm->mp4 and rename in pv_db .usm->.mp4)
+- Drop your mods in sdmc:/atmosphere/contents/TitleID/romfs/mods (no more need to convert .usm!)
 - Config file location is sdmc:/MikuMikuSwitchPlugin/config.toml
 - Motion dumps in sdmc:/MikuMikuSwitchPlugin/Dump/*.txt
 - Wind dumps in sdmc:/MikuMikuSwitchPlugin/Wind/*.txt
@@ -116,7 +118,7 @@ Hotkeys:
 # New Classics
 - Playalable port of New Classics
 - Chart packs or nc song packs load the same
-- Specific aet hit sounds dont work, it needs an id from mod_aet_db.bin to put instead of name
+- Specific aet hit works, thx to DeepSeek
 - NC Settings - go to customization menu and press ZL to change. Fully ported to ImGUI
 
 
@@ -165,6 +167,7 @@ _remember to optimise mods, and keep in mind that menus take several hundreds mb
 - If youre from older version, remember to move files from DMLSwitchPort to MikuMikuSwitchPlugin
 - Delete subsdk8, it was outdated, and suddenly turned out to cause framerate drop, everything is within subsdk9 now
 - Config lets you set many things, all explained
+- If song with video crashes, just convert it to vp9/h264 mp4 and also pack into .usm if you want, ive seen random ahh people using webm with audio, avi inside of usm, these are NOT supported, but theyre these 3%. Most people know that MM+ uses vp9
 - You can totally disable debug and freecam by having `debug = false` in global config file. This way, none of hotkeys and state selectors can be used
 - Debug may crash randomly when you select something. From my experience, the same random crashes happen in MM+
 - Aet_DT is known to crash, even tho it works fine in MM+. It seems to fail at `strlen and cmp` or something. No solution was found, even after disabling half of plugin features and all mods even LayerFS ones

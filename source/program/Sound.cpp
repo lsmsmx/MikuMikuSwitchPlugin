@@ -2,6 +2,7 @@
 #include "lib.hpp"
 #include "logger.hpp"
 #include "Config.hpp"
+#include <atomic>
 #include <string_view>
 #include <cmath>
 
@@ -32,10 +33,107 @@ enum PlayState {
 typedef void (*SetVoicePlayStateFn)(void* voice, int playState);
 static SetVoicePlayStateFn s_SetVoicePlayState = nullptr;
 
-static void*    s_sustainVoices[16] = {};
-static int      s_pendingSlot       = -1;
-static uint64_t s_officialLoopStart = 0;
-static uint64_t s_officialLoopEnd   = 0;
+// =========================================================================
+// 2. CUE OBJECT (diva_nx.nss)
+// =========================================================================
+//
+// The engine keeps 32 cue slots at 0xbe350930, stride 0xa0 (the loop in
+// FUN_00606d80). FUN_006085cc picks one for every play and, when all 32 are
+// busy, reuses the cue with the oldest play id -- which is what a looping
+// sustain always looks like, since it never re-triggers. FUN_00608a20 (the
+// function we hook) fills it in, and the voice's PCM arrives later through
+// nn::audio::AppendWaveBuffer().
+//
+// The appended voice is not reachable from the cue, so a sustain is still bound
+// the way it always was -- the wave buffer that follows the queue-4 start is
+// ours. What the cue *is* good for is telling whether that start is still the
+// one we armed: every recycle (steal, restart, release) writes a new play id
+// and clears the archive entry, and the engine stops the voice while doing so.
+
+#define ADDR_CUE_POOL        0x00BE350930
+#define CUE_STRIDE           0xa0
+#define CUE_COUNT            32
+
+static const uintptr_t CUE_PROP   = 0x68;  // sound archive entry, 0 while idle
+static const uintptr_t CUE_PLAYID = 0x70;  // int32, new on every start
+
+struct SustainSlot {
+    void*   cue;         // cue that started this sustain (nullptr = free)
+    void*   voice;       // voice, once its wave buffer has been seen
+    int32_t play_id;     // cue+0x70 at the time the sustain was started
+    int32_t loop_start;
+    int32_t loop_end;
+};
+
+static SustainSlot s_sustain[16] = {};
+
+// Slot that is waiting for its wave buffer. One at a time, like the claim it
+// replaces: two sustains started in the same frame must not fight over the same
+// voice.
+static int s_claimSlot = -1;
+
+// The cue is set up on the game thread, the wave buffer is appended on the sound
+// thread -- so everything shared sits behind this lock.
+static std::atomic<uint32_t> s_sustainLock{ 0 };
+
+static void SustainLock()   { while (s_sustainLock.exchange(1, std::memory_order_acquire)) { } }
+static void SustainUnlock() { s_sustainLock.store(0, std::memory_order_release); }
+
+static inline int32_t CuePlayId(void* cue) {
+    return *reinterpret_cast<int32_t*>((uintptr_t)cue + CUE_PLAYID);
+}
+
+// Is this still the cue we armed the sustain on? A recycle gives it a new play
+// id and clears its archive entry, and the engine stops the voice while doing
+// so -- whatever we still hold from back then is worthless and must not be
+// poked (the sound that owns that voice now is an innocent bystander).
+static inline bool CueAlive(void* cue, int32_t play_id) {
+    return cue != nullptr
+        && CuePlayId(cue) == play_id
+        && *reinterpret_cast<void**>((uintptr_t)cue + CUE_PROP) != nullptr;
+}
+
+static void StopVoice(void* voice) {
+    if (voice && s_SetVoicePlayState) {
+        s_SetVoicePlayState(voice, PlayState_Stopped);
+    }
+}
+
+static void ClearRecordLocked(int slot) {
+    SustainSlot& rec = s_sustain[slot];
+
+    rec.cue        = nullptr;
+    rec.voice      = nullptr;
+    rec.play_id    = 0;
+    rec.loop_start = 0;
+    rec.loop_end   = 0;
+
+    if (s_claimSlot == slot)
+        s_claimSlot = -1;
+}
+
+// Unlink slot `slot` and hand back its voice -- but only while the cue still
+// runs the play we armed.
+static void* DetachVoiceLocked(int slot) {
+    SustainSlot& rec = s_sustain[slot];
+    void* voice = rec.voice;
+
+    if (!(voice && CueAlive(rec.cue, rec.play_id)))
+        voice = nullptr;
+
+    ClearRecordLocked(slot);
+    return voice;
+}
+
+// The official loop region has to lie inside the buffer we are handed. That is
+// what keeps a short hit or menu blip from ever being taken for the sustain
+// sample when it gets to the sound thread first.
+static inline bool LoopFits(const SustainSlot& rec, const WaveBuffer* waveBuffer) {
+    return rec.loop_start >= 0
+        && rec.loop_end > rec.loop_start
+        && rec.loop_end <= static_cast<int32_t>(waveBuffer->endSampleOffset)
+        && waveBuffer->endSampleOffset > 10000;
+}
 
 inline int GetSustainSlot(std::string_view name) {
     if (name.find("rush") != std::string_view::npos) return 6;
@@ -60,30 +158,47 @@ inline int GetSustainSlot(std::string_view name) {
 }
 
 // =========================================================================
-// 2. SUSTAIN SLOT STOPPING MANAGEMENT
+// 3. SUSTAIN SLOT STOPPING MANAGEMENT
 // =========================================================================
 
 void StopSlot(int slot) {
-    if (slot >= 0 && slot < 16 && s_sustainVoices[slot]) {
-        void* voice = s_sustainVoices[slot];
-        s_sustainVoices[slot] = nullptr;
+    if (slot < 0 || slot >= 16)
+        return;
 
-        if (s_SetVoicePlayState) {
-            s_SetVoicePlayState(voice, PlayState_Stopped);
-        }
-    }
+    SustainLock();
+    void* voice = DetachVoiceLocked(slot);
+    SustainUnlock();
+
+    StopVoice(voice);
 }
 
 void StopAll() {
-    s_pendingSlot = -1;
-    for (int i = 0; i < 16; i++) {
-        StopSlot(i);
-    }
+    void* voices[16];
+
+    SustainLock();
+    for (int i = 0; i < 16; i++)
+        voices[i] = DetachVoiceLocked(i);
+    SustainUnlock();
+
+    for (int i = 0; i < 16; i++)
+        StopVoice(voices[i]);
 }
 
 // =========================================================================
-// 3. LOOPING HOOKS
+// 4. LOOPING HOOKS
 // =========================================================================
+
+static inline bool IsSystemSe(std::string_view name) {
+    return name.find("dialog")  != std::string_view::npos
+        || name.find("sys_")    != std::string_view::npos
+        || name.find("pause")   != std::string_view::npos
+        || name.find("result")  != std::string_view::npos
+        || name.find("restart") != std::string_view::npos
+        || name.find("retry")   != std::string_view::npos
+        || name.find("clear")   != std::string_view::npos
+        || name.find("miss")    != std::string_view::npos
+        || name.find("wrong")   != std::string_view::npos;
+}
 
 HOOK_DEFINE_TRAMPOLINE(SoundCueLoadHook) {
     static uint32_t Callback(void* cue, uint32_t queue_index, const char* se_name, float volume) {
@@ -96,15 +211,9 @@ HOOK_DEFINE_TRAMPOLINE(SoundCueLoadHook) {
 
         std::string_view name(se_name);
 
-        if (name.find("dialog")  != std::string_view::npos ||
-            name.find("sys_")    != std::string_view::npos ||
-            name.find("pause")   != std::string_view::npos ||
-            name.find("result")  != std::string_view::npos ||
-            name.find("restart") != std::string_view::npos ||
-            name.find("retry")   != std::string_view::npos ||
-            name.find("clear")   != std::string_view::npos ||
-            name.find("miss")    != std::string_view::npos ||
-            name.find("wrong")   != std::string_view::npos) {
+        // A system cue means the player left the song or a menu took over: let
+        // go of every sustain we still hold (their voices only, see DetachVoice).
+        if (IsSystemSe(name)) {
             StopAll();
             return ret;
         }
@@ -113,30 +222,47 @@ HOOK_DEFINE_TRAMPOLINE(SoundCueLoadHook) {
         if (slot >= 0) {
             if (name.find("_off") != std::string_view::npos) {
                 StopSlot(slot);
-                if (s_pendingSlot == slot) {
-                    s_pendingSlot = -1;
-                }
                 return ret;
             }
 
+            // ret is the new play id, 0 when the name is not in the archive and
+            // the cue was never started -- then there is no voice to loop.
+            // Only the sustain queue carries the looping voice; slot >= 6 are
+            // the rush/scratch ones, which come back on that queue too.
             bool isSustainQueue = (queue_index == 4);
+            bool isLoopStart    = (name.find("_on") != std::string_view::npos) || slot >= 6;
 
-            if (isSustainQueue && (name.find("_on") != std::string_view::npos || slot >= 6)) {
-                uintptr_t prop = *reinterpret_cast<uintptr_t*>((uintptr_t)cue + 0x68);
+            if (ret != 0 && isSustainQueue && isLoopStart) {
+                int32_t loop_start = 0;
+                int32_t loop_end   = 0;
+
+                uintptr_t prop = *reinterpret_cast<uintptr_t*>((uintptr_t)cue + CUE_PROP);
                 if (prop) {
-                    s_officialLoopStart = *reinterpret_cast<uint64_t*>(prop + 0x10);
-                    s_officialLoopEnd   = *reinterpret_cast<uint64_t*>(prop + 0x18);
-                } else {
-                    s_officialLoopStart = 0;
-                    s_officialLoopEnd   = 0;
+                    loop_start = *reinterpret_cast<int32_t*>(prop + 0x10);
+                    loop_end   = *reinterpret_cast<int32_t*>(prop + 0x18);
                 }
 
-                if (slot == 6 && (s_officialLoopEnd <= s_officialLoopStart || s_officialLoopStart == 0)) {
-                    s_officialLoopStart = 123206;
-                    s_officialLoopEnd   = 125305;
+                if (slot == 6 && (loop_end <= loop_start || loop_start == 0)) {
+                    loop_start = 123206;
+                    loop_end   = 125305;
                 }
 
-                s_pendingSlot = slot;
+                void* stale = nullptr;
+
+                SustainLock();
+                if (s_sustain[slot].cue != cue)
+                    stale = DetachVoiceLocked(slot);
+
+                SustainSlot& rec = s_sustain[slot];
+                rec.cue        = cue;
+                rec.voice      = nullptr;
+                rec.play_id    = CuePlayId(cue);
+                rec.loop_start = loop_start;
+                rec.loop_end   = loop_end;
+                s_claimSlot    = slot;
+                SustainUnlock();
+
+                StopVoice(stale);
             }
         }
         return ret;
@@ -145,30 +271,69 @@ HOOK_DEFINE_TRAMPOLINE(SoundCueLoadHook) {
 
 HOOK_DEFINE_TRAMPOLINE(AppendWaveBufferHook) {
     static void Callback(void* voice, const WaveBuffer* waveBuffer) {
-        if (!waveBuffer) {
+        if (!voice || !waveBuffer) {
             Orig(voice, waveBuffer);
             return;
         }
 
-        if (s_pendingSlot >= 0 && waveBuffer->endSampleOffset > 10000) {
-            int slot = s_pendingSlot;
-            s_pendingSlot = -1;
+        int32_t loop_start = 0;
+        int32_t loop_end   = 0;
+        int     slot       = -1;
 
-            if (s_sustainVoices[slot]) {
-                StopSlot(slot);
+        SustainLock();
+
+        bool tracked = false;
+        for (int i = 0; i < 16; i++) {
+            if (s_sustain[i].cue) {
+                tracked = true;
+                break;
+            }
+        }
+
+        if (tracked) {
+            // Forget the sustains whose cue the engine has recycled: it changed
+            // the play id, stopped the voice and, if this was a steal, gave the
+            // slot to another sound. Nothing of ours is left in there.
+            for (int i = 0; i < 16; i++) {
+                SustainSlot& rec = s_sustain[i];
+                if (rec.cue && !CueAlive(rec.cue, rec.play_id)) {
+                    ClearRecordLocked(i);
+                }
             }
 
+            // Renewal: the engine hands us a buffer for a voice we already loop.
+            for (int i = 0; i < 16 && slot < 0; i++) {
+                SustainSlot& rec = s_sustain[i];
+                if (!rec.cue || rec.voice != voice || !LoopFits(rec, waveBuffer))
+                    continue;
+
+                slot       = i;
+                loop_start = rec.loop_start;
+                loop_end   = rec.loop_end;
+            }
+
+            // The wave buffer that follows the queue-4 start is ours -- and the
+            // claim is not used up by a buffer that cannot hold the loop region,
+            // so a short blip racing us to the sound thread costs nothing.
+            if (slot < 0 && s_claimSlot >= 0 && s_claimSlot < 16) {
+                SustainSlot& rec = s_sustain[s_claimSlot];
+                if (rec.cue && !rec.voice && LoopFits(rec, waveBuffer)) {
+                    rec.voice  = voice;
+                    slot       = s_claimSlot;
+                    loop_start = rec.loop_start;
+                    loop_end   = rec.loop_end;
+                }
+            }
+        }
+
+        SustainUnlock();
+
+        if (slot >= 0) {
             auto* wb = const_cast<WaveBuffer*>(waveBuffer);
-
-            int32_t loopStart = static_cast<int32_t>(s_officialLoopStart);
-            int32_t loopEnd   = static_cast<int32_t>(s_officialLoopEnd);
-
-            wb->startSampleOffset = loopStart;
-            wb->endSampleOffset   = loopEnd;
+            wb->startSampleOffset = loop_start;
+            wb->endSampleOffset   = loop_end;
             wb->isLoop            = true;
             wb->isEndOfStream     = false;
-
-            s_sustainVoices[slot] = voice;
         }
 
         Orig(voice, waveBuffer);
@@ -176,7 +341,7 @@ HOOK_DEFINE_TRAMPOLINE(AppendWaveBufferHook) {
 };
 
 // =========================================================================
-// 4. VOLUME BOOST HOOKS
+// 5. VOLUME BOOST HOOKS
 // =========================================================================
 
 #define ADDR_APPLY_SOUND_SETTINGS  0x000C9660
@@ -338,7 +503,7 @@ void ApplyBoost() {
 }
 
 // =========================================================================
-// 5. INITIALIZATION
+// 6. INITIALIZATION
 // =========================================================================
 
 inline uintptr_t ResolveSymbol(const char* sym) {

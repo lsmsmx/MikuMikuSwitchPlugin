@@ -14,6 +14,7 @@
 #include "ImGui.hpp"
 #include "nvn_hooks.hpp"
 #include "PvLoader.hpp"
+#include "ThumbnailLoader.hpp"
 #include "patches.hpp"
 #include "fs.hpp"
 #include "StrArray.hpp"
@@ -25,7 +26,9 @@
 #include "Mode2DNoMV.hpp"
 #include "SprBackFix.hpp"
 #include "Dimming.hpp"
+#include "UsmSupport.hpp"
 #include "TheaterRestoration.hpp"
+#include "OpdMakerFix.hpp"
 #include "overlays/SongQuickJump.hpp"
 #include "overlays/VolumeOverlay.hpp"
 #include "overlays/SaveBackup.hpp"
@@ -79,6 +82,8 @@ HOOK_DEFINE_TRAMPOLINE(MainHook) {
         VolumeOverlay::Init();
         MemoryHooks::Init();
 
+        UsmSupport::init();
+
         Orig();
     }
 };
@@ -98,10 +103,13 @@ extern "C" void exl_main(void* x0, void* x1) {
     StrArray::init();
     SpriteLoader::init();
     PvLoader::init();
+    ThumbnailLoader::init();
     AetDB::init();
     SpriteDrawLimitPatch::init();
     AutoPlay::init();
     BackgroundScaleFix::init();
     TheaterRestoration::init();
+    OpdMakerFix::init();
+
 
 };

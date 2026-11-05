@@ -125,13 +125,14 @@ HOOK_DEFINE_TRAMPOLINE(UpdateCameraHook) {
 
         // Roll & Zoom
         bool yHeld = (all_buttons & nn::hid::Button::Y);
-        if (all_buttons & nn::hid::Button::L) {
-            if (yHeld) *roll -= speed / 5.0f;
-            else *fov += speed;
-        }
-        if (all_buttons & nn::hid::Button::R) {
-            if (yHeld) *roll -= speed / 5.0f;
-            else *fov -= speed;
+        float rollSpeed = 1.5f;
+
+        if (yHeld) {
+            if (all_buttons & nn::hid::Button::L) *roll += rollSpeed;
+            if (all_buttons & nn::hid::Button::R) *roll -= rollSpeed;
+        } else {
+            if (all_buttons & nn::hid::Button::L) *fov += speed * 5.0f;
+            if (all_buttons & nn::hid::Button::R) *fov -= speed * 5.0f;
         }
         *fov = std::clamp(*fov, 1.0f, 200.0f);
 

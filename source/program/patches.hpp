@@ -109,7 +109,7 @@ inline void ApplyCustomPatches() {
 
     // 2. Disable Hand Scaling
     if (Config::disableHandScaling) {
-        exl::patch::CodePatcher(ADDR_HAND_SCALING).Write<uint32_t>(0x14000258);
+        exl::patch::CodePatcher(ADDR_HAND_SCALING).Write<uint32_t>(0x14000252);
     }
 
     // 3. Disable Lyrics Display

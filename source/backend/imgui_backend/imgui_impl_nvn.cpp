@@ -11,7 +11,6 @@
 #include "lib/diag/assert.hpp"
 
 #define UBOSIZE 0x1000
-#define ALIGN_UP(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 
 typedef float Matrix44f[4][4];
 
@@ -44,8 +43,6 @@ static void BuildOrthoMatrix(Matrix44f out, const ImVec2 &display_pos, const ImV
 
 namespace ImguiNvnBackend {
 
-    // Generous command memory bounds: 1 MB Command Memory + 256 KB Control Memory
-    // Prevents GPU buffer exhaustion even with hundreds of active ImGui widgets
     constexpr size_t kCmdMemSize  = 1024u * 1024u; // 1 MB
     constexpr size_t kCtrlMemSize = 256u * 1024u;  // 256 KB
 
@@ -53,15 +50,21 @@ namespace ImguiNvnBackend {
         const nvn::Texture *g_frame_color_target = nullptr;
     }
 
-    void SetRenderTarget(const nvn::Texture *colorTarget) {
-        g_frame_color_target = colorTarget;
-    }
-
     NvnBackendData *getBackendData() {
         NvnBackendData *result = ImGui::GetCurrentContext() ? (NvnBackendData *) ImGui::GetIO().BackendRendererUserData
                                                             : nullptr;
         EXL_ASSERT(result, "Backend has not been initialized!");
         return result;
+    }
+
+    void SetRenderTarget(const nvn::Texture *colorTarget) {
+        g_frame_color_target = colorTarget;
+        if (colorTarget) {
+            auto bd = getBackendData();
+            if (bd) {
+                bd->viewportSize = ImVec2((float)colorTarget->GetWidth(), (float)colorTarget->GetHeight());
+            }
+        }
     }
 
     bool createShaders() {
@@ -178,7 +181,6 @@ namespace ImguiNvnBackend {
         io.BackendRendererName = "imgui_impl_nvn";
         io.IniFilename = nullptr;
         io.MouseDrawCursor = true;
-        io.DisplaySize = ImVec2(1280, 720);
 
         auto *bd = IM_NEW(NvnBackendData)();
         EXL_ASSERT(bd, "Backend was not Created!");
@@ -235,7 +237,9 @@ namespace ImguiNvnBackend {
         ImGuiIO &io = ImGui::GetIO();
         auto bd = getBackendData();
 
-        io.DisplaySize = bd->viewportSize;
+        if (bd && bd->viewportSize.x > 0.0f && bd->viewportSize.y > 0.0f) {
+            io.DisplaySize = bd->viewportSize;
+        }
         io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
         io.DeltaTime = 1.0f / 60.0f;
     }
@@ -307,7 +311,14 @@ namespace ImguiNvnBackend {
             return;
         }
 
-        // Reset command and control memory offsets so memory NEVER runs out after 10 seconds
+        // Dynamically resolve target resolution from active render target or draw data
+        ImVec2 vp = drawData->DisplaySize;
+        if (g_frame_color_target) {
+            vp.x = (float)g_frame_color_target->GetWidth();
+            vp.y = (float)g_frame_color_target->GetHeight();
+        }
+        bd->viewportSize = vp;
+
         cmdBuf->AddCommandMemory(&bd->cmdMemPool[frame_index], 0, kCmdMemSize);
         cmdBuf->AddControlMemory(bd->controlMemory[frame_index], kCtrlMemSize);
 
@@ -334,7 +345,6 @@ namespace ImguiNvnBackend {
 
         const ImVec2 clip_off = drawData->DisplayPos;
         const ImVec2 clip_scale = drawData->FramebufferScale;
-        const ImVec2 vp = bd->viewportSize;
         cmdBuf->SetViewport(0, 0, vp.x, vp.y);
         cmdBuf->SetScissor(0, 0, vp.x, vp.y);
 
@@ -382,9 +392,7 @@ namespace ImguiNvnBackend {
                 if (scissor_x + scissor_w_px > (int)vp.x) scissor_w_px = (int)vp.x - scissor_x;
                 if (scissor_y + scissor_h_px > (int)vp.y) scissor_h_px = (int)vp.y - scissor_y;
 
-                // Skip empty draw calls to prevent GPU assembler hangs
                 if (cmd.ElemCount == 0) continue;
-
                 if (scissor_w_px <= 0 || scissor_h_px <= 0) continue;
 
                 cmdBuf->SetScissor(scissor_x, scissor_y, scissor_w_px, scissor_h_px);
@@ -413,7 +421,6 @@ namespace ImguiNvnBackend {
 
         auto handle = cmdBuf->EndRecording();
 
-        // CRITICAL FIX: Never submit a NULL command handle to the GPU queue (Prevents FPS: 0.0 Freeze)
         if (handle != 0) {
             bd->queue->SubmitCommands(1, &handle);
         }

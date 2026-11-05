@@ -23,10 +23,8 @@ namespace CustomizeSelUi
     constexpr int32_t PreviewQueueIndex = 3;
     constexpr int32_t SFXQueueIndex = 1;
 
-    constexpr float DialogW = 680.0f;
-    constexpr float DialogH = 440.0f;
-    constexpr float CanvasW = 1280.0f;
-    constexpr float CanvasH = 720.0f;
+    constexpr float DialogBaseW = 680.0f;
+    constexpr float DialogBaseH = 440.0f;
 
     constexpr float AnimSpeedIn  = 8.0f;
     constexpr float AnimSpeedOut = 9.0f;
@@ -349,12 +347,14 @@ namespace CustomizeSelUi
             }
         }
 
-        float alpha = std::clamp(g_animProgress, 0.0f, 1.0f);
-        float scale = 0.88f + 0.12f * std::sin(alpha * 1.5707963f);
+        float s = io.DisplaySize.y / 720.0f;
 
-        float curW = DialogW * scale;
-        float curH = DialogH * scale;
-        ImVec2 center((CanvasW - curW) * 0.5f, (CanvasH - curH) * 0.5f);
+        float alpha = std::clamp(g_animProgress, 0.0f, 1.0f);
+        float scale = (0.88f + 0.12f * std::sin(alpha * 1.5707963f)) * s;
+
+        float curW = DialogBaseW * scale;
+        float curH = DialogBaseH * scale;
+        ImVec2 center((io.DisplaySize.x - curW) * 0.5f, (io.DisplaySize.y - curH) * 0.5f);
 
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
         ImGui::SetNextWindowPos(center, ImGuiCond_Always);
@@ -369,16 +369,16 @@ namespace CustomizeSelUi
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRectFullScreen();
 
-            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(245, 252, 252, (int)(245.0f * alpha)), 14.0f);
-            drawList->AddRect(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(0, 206, 209, (int)(220.0f * alpha)), 14.0f, 0, 2.5f);
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(245, 252, 252, (int)(245.0f * alpha)), 14.0f * s);
+            drawList->AddRect(center, ImVec2(center.x + curW, center.y + curH), IM_COL32(0, 206, 209, (int)(220.0f * alpha)), 14.0f * s, 0, 2.5f * s);
 
             float topH = 38.0f * scale;
-            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + topH), IM_COL32(0, 150, 180, (int)(250.0f * alpha)), 14.0f, ImDrawFlags_RoundCornersTop);
+            drawList->AddRectFilled(center, ImVec2(center.x + curW, center.y + topH), IM_COL32(0, 150, 180, (int)(250.0f * alpha)), 14.0f * s, ImDrawFlags_RoundCornersTop);
 
             const char* topTitle = "New Classics Options";
             ImGui::SetWindowFontScale(1.35f);
             ImVec2 topTextSz = ImGui::CalcTextSize(topTitle);
-            DrawBoldText(drawList, ImVec2(center.x + (curW - topTextSz.x) * 0.5f, center.y + 7.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), topTitle);
+            DrawBoldText(drawList, ImVec2(center.x + (curW - topTextSz.x) * 0.5f, center.y + 7.0f * s), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), topTitle);
             ImGui::SetWindowFontScale(1.0f);
 
             int32_t targetId = nc::GetConfigSetID();
@@ -390,7 +390,7 @@ namespace CustomizeSelUi
             else                     slotBadge = util::Format("[ Config #%d ]", targetId);
 
             ImVec2 slotSz = ImGui::CalcTextSize(slotBadge.c_str());
-            drawList->AddText(ImVec2(center.x + (curW - slotSz.x) * 0.5f, center.y + 44.0f), IM_COL32(0, 130, 155, (int)(240.0f * alpha)), slotBadge.c_str());
+            drawList->AddText(ImVec2(center.x + (curW - slotSz.x) * 0.5f, center.y + 44.0f * s), IM_COL32(0, 130, 155, (int)(240.0f * alpha)), slotBadge.c_str());
 
             const char* bannerTitles[TotalPages] = { "Sound Config", "Technical Zone Settings", "Other Settings" };
             const char* subTitles[TotalPages] = {
@@ -401,16 +401,16 @@ namespace CustomizeSelUi
 
             float ribbonW = 340.0f * scale;
             float ribbonH = 26.0f * scale;
-            ImVec2 ribbonPos(center.x + (curW - ribbonW) * 0.5f, center.y + 64.0f);
-            drawList->AddRectFilled(ribbonPos, ImVec2(ribbonPos.x + ribbonW, ribbonPos.y + ribbonH), IM_COL32(24, 88, 160, (int)(235.0f * alpha)), 8.0f);
+            ImVec2 ribbonPos(center.x + (curW - ribbonW) * 0.5f, center.y + 64.0f * s);
+            drawList->AddRectFilled(ribbonPos, ImVec2(ribbonPos.x + ribbonW, ribbonPos.y + ribbonH), IM_COL32(24, 88, 160, (int)(235.0f * alpha)), 8.0f * s);
 
             ImGui::SetWindowFontScale(1.15f);
             ImVec2 bTextSz = ImGui::CalcTextSize(bannerTitles[g_currentPage]);
-            DrawBoldText(drawList, ImVec2(ribbonPos.x + (ribbonW - bTextSz.x) * 0.5f, ribbonPos.y + 4.0f), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), bannerTitles[g_currentPage]);
+            DrawBoldText(drawList, ImVec2(ribbonPos.x + (ribbonW - bTextSz.x) * 0.5f, ribbonPos.y + 4.0f * s), IM_COL32(255, 255, 255, (int)(255.0f * alpha)), bannerTitles[g_currentPage]);
             ImGui::SetWindowFontScale(1.0f);
 
             ImVec2 subTextSz = ImGui::CalcTextSize(subTitles[g_currentPage]);
-            drawList->AddText(ImVec2(center.x + (curW - subTextSz.x) * 0.5f, center.y + 94.0f), IM_COL32(70, 90, 100, (int)(220.0f * alpha)), subTitles[g_currentPage]);
+            drawList->AddText(ImVec2(center.x + (curW - subTextSz.x) * 0.5f, center.y + 94.0f * s), IM_COL32(70, 90, 100, (int)(220.0f * alpha)), subTitles[g_currentPage]);
 
             ConfigSet* cfg = nc::GetConfigSet();
             SharedData& shared = nc::GetSharedData();
@@ -455,10 +455,10 @@ namespace CustomizeSelUi
                 rows.push_back({ "Star Control", starNames[std::clamp(starCtrl, 0, 2)], "Choose which input method can trigger Star notes.", "" });
             }
 
-            float startY = center.y + 118.0f;
-            float rowH = (g_currentPage == 0) ? 36.0f : 42.0f;
+            float startY = center.y + 118.0f * s;
+            float rowH = (g_currentPage == 0) ? (36.0f * s) : (42.0f * s);
             float pillW = 530.0f * scale;
-            float pillH = (g_currentPage == 0) ? 30.0f : 34.0f;
+            float pillH = (g_currentPage == 0) ? (30.0f * s) : (34.0f * s);
 
             for (size_t i = 0; i < rows.size(); i++)
             {
@@ -475,7 +475,7 @@ namespace CustomizeSelUi
 
                 ImGui::SetWindowFontScale(1.10f);
                 ImVec2 lblSz = ImGui::CalcTextSize(rows[i].label.c_str());
-                float labelColW = pillW - 240.0f;
+                float labelColW = pillW - (240.0f * s);
                 ImVec2 lblPos(pPos.x + (labelColW - lblSz.x) * 0.5f, pPos.y + (pillH - lblSz.y) * 0.5f);
 
                 if (isSelected) DrawBoldText(drawList, lblPos, IM_COL32(255, 255, 255, (int)(255.0f * alpha)), rows[i].label.c_str());
@@ -483,8 +483,8 @@ namespace CustomizeSelUi
                 ImGui::SetWindowFontScale(1.0f);
 
                 float innerBoxW = 224.0f * scale;
-                float innerBoxH = pillH - 6.0f;
-                ImVec2 innerPos(pPos.x + pillW - innerBoxW - 6.0f, pPos.y + 3.0f);
+                float innerBoxH = pillH - (6.0f * s);
+                ImVec2 innerPos(pPos.x + pillW - innerBoxW - (6.0f * s), pPos.y + 3.0f * s);
 
                 ImU32 innerBg = isSelected ? IM_COL32(0, 155, 170, (int)(235.0f * alpha)) : IM_COL32(198, 208, 216, (int)(220.0f * alpha));
                 drawList->AddRectFilled(innerPos, ImVec2(innerPos.x + innerBoxW, innerPos.y + innerBoxH), innerBg, innerBoxH * 0.5f);
@@ -496,32 +496,32 @@ namespace CustomizeSelUi
 
                 drawList->AddText(ImVec2(valCenterX - (valSz.x * 0.5f), innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, valStr.c_str());
 
-                float arrowPulse = isSelected ? (std::sin(g_pulseTimer) * 1.5f) : 0.0f;
-                drawList->AddText(ImVec2(innerPos.x + 10.0f - arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, "<");
-                drawList->AddText(ImVec2(innerPos.x + innerBoxW - 18.0f + arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, ">");
+                float arrowPulse = isSelected ? (std::sin(g_pulseTimer) * 1.5f * s) : 0.0f;
+                drawList->AddText(ImVec2(innerPos.x + 10.0f * s - arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, "<");
+                drawList->AddText(ImVec2(innerPos.x + innerBoxW - 18.0f * s + arrowPulse, innerPos.y + (innerBoxH - valSz.y) * 0.5f), valCol, ">");
             }
 
             if (!rows.empty() && g_selectedItem < (int)rows.size())
             {
                 const auto& item = rows[g_selectedItem];
-                float helpCenterY = center.y + curH - (item.help_line2.empty() ? 54.0f : 64.0f);
+                float helpCenterY = center.y + curH - (item.help_line2.empty() ? (54.0f * s) : (64.0f * s));
 
                 ImVec2 h1Sz = ImGui::CalcTextSize(item.help_line1.c_str());
                 DrawBoldText(drawList, ImVec2(center.x + (curW - h1Sz.x) * 0.5f, helpCenterY), IM_COL32(50, 70, 85, (int)(250.0f * alpha)), item.help_line1.c_str());
 
                 if (!item.help_line2.empty()) {
                     ImVec2 h2Sz = ImGui::CalcTextSize(item.help_line2.c_str());
-                    DrawBoldText(drawList, ImVec2(center.x + (curW - h2Sz.x) * 0.5f, helpCenterY + 16.0f), IM_COL32(50, 70, 85, (int)(250.0f * alpha)), item.help_line2.c_str());
+                    DrawBoldText(drawList, ImVec2(center.x + (curW - h2Sz.x) * 0.5f, helpCenterY + 16.0f * s), IM_COL32(50, 70, 85, (int)(250.0f * alpha)), item.help_line2.c_str());
                 }
             }
 
-            float pageY = center.y + curH - 30.0f;
+            float pageY = center.y + curH - 30.0f * s;
             std::string pageStr = util::Format("<   %d / %d   >", g_currentPage + 1, TotalPages);
             ImVec2 pageSz = ImGui::CalcTextSize(pageStr.c_str());
             DrawBoldText(drawList, ImVec2(center.x + (curW - pageSz.x) * 0.5f, pageY), IM_COL32(0, 160, 185, (int)(255.0f * alpha)), pageStr.c_str());
 
-            drawList->AddText(ImVec2(center.x + 36.0f, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[L]");
-            drawList->AddText(ImVec2(center.x + curW - 56.0f, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[R]");
+            drawList->AddText(ImVec2(center.x + 36.0f * s, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[L]");
+            drawList->AddText(ImVec2(center.x + curW - 56.0f * s, pageY), IM_COL32(100, 125, 140, (int)(220.0f * alpha)), "[R]");
 
             drawList->PopClipRect();
         }
@@ -566,7 +566,7 @@ namespace CustomizeSelUi
         static uint64_t Callback(uint64_t a1) {
             s_inCustomizeScene = true;
             CustomizeSelUi::Update();
-            Hints::SetCustomizeSceneActive(); // <-- [ZL] hint
+            Hints::SetCustomizeSceneActive();
             if (CustomizeSelUi::IsOpen()) {
                 return 1;
             }
@@ -582,7 +582,6 @@ namespace CustomizeSelUi
         CustomizeSelTaskDestHook::InstallAtOffset(0x778990);
         CSTopMenuMainCtrlHook::InstallAtOffset(0x7a9370);
 
-        // lights perhaps slider controller x13 nullptr fix
         exl::patch::CodePatcher(0x00601eb0).Write<uint32_t>(0x14000028);
     }
 }

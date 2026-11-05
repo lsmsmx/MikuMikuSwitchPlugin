@@ -1,6 +1,7 @@
 #include "MemoryHooks.hpp"
 #include "lib.hpp"
 #include "logger.hpp"
+#include "UsmSupport.hpp"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -298,6 +299,50 @@ namespace MemoryHooks {
         }
     };
 
+    // SIZE-DISPATCHED RESOURCE ALLOC (0x0004c3d0)
+    //
+    // <=128 KB asks the 320 MB heap, above that the 900 MB one, and it retries
+    // only the same heap after a trim -- so a failure comes back as null. Its
+    // callers store that null and memcpy into it right away (0x204f70,
+    // 0x20522c), the same crash shape as the SE buffer. Retry on the other
+    // heap; freeing needs nothing extra, 0x4c380 / 0x4c440 route by address.
+    HOOK_DEFINE_TRAMPOLINE(SegaResourceAllocRescueHook) {
+        static void* Callback(size_t size) {
+            void* ptr = Orig(size);
+            if (!ptr && size > 0) {
+                ptr = SafeRescueSegaPool(ptr, size, 8);
+            }
+            return ptr;
+        }
+    };
+
+    // SE SAMPLE BUFFER (0x0004c010)
+    //
+    // aligned_alloc in four instructions: it asks the 320 MB heap for every
+    // size, with no size dispatch and no second chance. Its main caller,
+    // FUN_00705990 (the SE voice PCM converter), stores the result without a
+    // null check and then writes the sample through it -- so an exhausted
+    // small heap here is a crash on the next note, not an error return.
+    // Retry once on the 900 MB heap; the free side needs nothing extra because
+    // 0x4c380 already picks the owning heap from the pointer's address range.
+    HOOK_DEFINE_TRAMPOLINE(SegaAlignedAllocRescueHook) {
+        static void* Callback(size_t size, size_t align) {
+            void* ptr = Orig(size, align);
+            if (!ptr && size > 0) {
+                EnsureSdkAllocators();
+                uintptr_t base = exl::util::GetMainModuleInfo().m_Total.m_Start;
+                void* poolLarge = reinterpret_cast<void*>(base + 0x4d0eb000); // 900 MB
+
+                if (s_StdAllocAlignFn) {
+                    ptr = s_StdAllocAlignFn(poolLarge, size, align);
+                } else if (s_StdAllocFn) {
+                    ptr = s_StdAllocFn(poolLarge, size);
+                }
+            }
+            return ptr;
+        }
+    };
+
     // =========================================================================
     // Replaces Sega's O(Max_ID) memory waste with strictly O(Total_Textures)
     // =========================================================================
@@ -581,6 +626,8 @@ namespace MemoryHooks {
         SegaMemalignHook::InstallAtOffset(0x0004c2f0);
         SegaReallocRouterHook::InstallAtOffset(0x0004bec0);
         SegaFreeHook::InstallAtOffset(0x0004bdf0);
+        SegaAlignedAllocRescueHook::InstallAtOffset(0x0004c010);
+        SegaResourceAllocRescueHook::InstallAtOffset(0x0004c3d0);
 
         // 1.(tex_db.bin)
         TexDbPreSortInlineHook::InstallAtOffset(ADDR_INLINE_TEX_PRE_SORT);

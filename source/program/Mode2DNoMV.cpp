@@ -41,10 +41,6 @@ namespace Mode2DNoMV {
     static constexpr uintptr_t ADDR_GET_SPRITE_ID_FUNC   = 0x0061db40;
     static constexpr uintptr_t OFFSET_SPR_DB_PTR         = 0x00cdf360;
 
-    // Movie blocking offsets
-    static constexpr uintptr_t ADDR_TASK_MOVIE_OPEN      = 0x00439FD0;
-    static constexpr uintptr_t ADDR_TASK_MOVIE_READY     = 0x0043A310;
-
     // GPU and folder patches
     static constexpr uintptr_t ADDR_OBJ_FOLDER           = 0x00AC6868;
     static constexpr uintptr_t ADDR_GPU_PASS_1           = 0x004F14D0;
@@ -181,24 +177,12 @@ namespace Mode2DNoMV {
 
     // =========================================================================
     // MOVIE PLAYBACK BLOCKING
+    // -------------------------------------------------------------------------
+    // The TaskMovie OpenFile (0x00439FD0) and IsReady (0x0043A310) hooks now
+    // live in UsmSupport.cpp, which owns the entire movie pipeline.  They still
+    // honour Mode2DNoMV::ShouldBlockMovie(), so the no-MV behaviour is unchanged.
+    // (Two trampolines on the same address previously clobbered each other.)
     // =========================================================================
-    HOOK_DEFINE_TRAMPOLINE(TaskMovie_OpenFile_Hook) {
-        static uint64_t Callback(uintptr_t this_ptr, const char* file_path) {
-            if (ShouldBlockMovie()) {
-                return 0;
-            }
-            return Orig(this_ptr, file_path);
-        }
-    };
-
-    HOOK_DEFINE_TRAMPOLINE(TaskMovie_IsReady_Hook) {
-        static uint64_t Callback(uintptr_t this_ptr) {
-            if (ShouldBlockMovie()) {
-                return 1;
-            }
-            return Orig(this_ptr);
-        }
-    };
 
     // =========================================================================
     // SAFE DSC SCRIPT CLEANUP FOR 2D MODE
@@ -608,9 +592,8 @@ namespace Mode2DNoMV {
         // Revert 2D patches upon returning to menu
         FrameUpdateHook::InstallAtOffset(ADDR_GET_INPUT_STATE_FUNC);
 
-        // Movie blocking
-        TaskMovie_OpenFile_Hook::InstallAtOffset(ADDR_TASK_MOVIE_OPEN);
-        TaskMovie_IsReady_Hook::InstallAtOffset(ADDR_TASK_MOVIE_READY);
+        // Movie blocking: hooks moved to UsmSupport::init() (same offsets) so a
+        // single trampoline owns 0x00439FD0 / 0x0043A310.
 
         // DSC parser
         ParseDscHook::InstallAtOffset(ADDR_PARSE_DSC_FUNC);

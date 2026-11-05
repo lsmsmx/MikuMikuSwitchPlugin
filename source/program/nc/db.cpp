@@ -95,6 +95,17 @@ static bool ParseDifficultyEntry(toml::array& node, db::DifficultyEntry& entry)
 	return true;
 }
 
+// The engine's own by-name AET lookups, used exactly the way the engine uses them
+// (see FUN_003d7db0: `adrp x0,0xcdf000; ldr x0,[x0,#0x520]` -> a1,
+// `add x1,sp,#0x40` -> a2, `bl 0x1e2580`).
+//
+// The PC build of this mod passes nullptr as a1; on Switch that cannot work. Both
+// functions start by reading the manager's name-sorted vectors as `param_1 + 0x98`
+// (sets) and `param_1 + 0x118` (scenes), so a null a1 faults at address 0x98.
+static constexpr uintptr_t OFFSET_AET_MANAGER           = 0x00CDF520; // ptr -> AetMgr
+static constexpr uintptr_t OFFSET_GET_AET_SET_BY_NAME   = 0x001E2580;
+static constexpr uintptr_t OFFSET_GET_AET_SCENE_BY_NAME = 0x001E27B0;
+
 static bool ParsePVEntry(toml::table& node, db::SongEntry* entry)
 {
 	const char* difficulty_names[MaxDifficultyCount] = { "easy", "normal", "hard", "extreme", "encore" };
@@ -122,9 +133,47 @@ static bool ParsePVEntry(toml::table& node, db::SongEntry* entry)
 	entry->star_long_se_name = node["star_long_se_name"].value_or(DefaultStarSound);
 	entry->link_se_name = node["link_se_name"].value_or(DefaultStarSound);
 
-	entry->target_hit_effect_aetset_id = node["target_hit_effect_aetset_id"].value_or(0xFFFFFFFF);
-	entry->target_hit_effect_scene_id  = node["target_hit_effect_scene_id"].value_or(0xFFFFFFFF);
-	entry->target_hit_effect_sprset_id = node["target_hit_effect_sprset_id"].value_or(0xFFFFFFFF);
+	if (!node.contains("hit_effect") || !node["hit_effect"].is_string())
+	{
+		entry->target_hit_effect_aetset_id = node["target_hit_effect_aetset_id"].value_or(0xFFFFFFFF);
+		entry->target_hit_effect_scene_id  = node["target_hit_effect_scene_id"].value_or(0xFFFFFFFF);
+		entry->target_hit_effect_sprset_id = node["target_hit_effect_sprset_id"].value_or(0xFFFFFFFF);
+	}
+	else
+	{
+		std::string set_name = node["hit_effect"].value_or("?");
+		std::string scene_name = set_name + "_MAIN";
+
+		uintptr_t base_addr = exl::util::GetMainModuleInfo().m_Total.m_Start;
+		void* aet_mgr = *reinterpret_cast<void**>(base_addr + OFFSET_AET_MANAGER);
+
+		if (aet_mgr != nullptr)
+		{
+			auto GetAetSetInfoByName =
+				(AetSetInfo* (*)(void*, prj::string_range*))(base_addr + OFFSET_GET_AET_SET_BY_NAME);
+			auto GetAetSceneInfoByName =
+				(AetSceneInfo* (*)(void*, prj::string_range*))(base_addr + OFFSET_GET_AET_SCENE_BY_NAME);
+
+			// Both take the range by pointer; end is begin + length, no terminator.
+			prj::string_range set_range(set_name);
+			prj::string_range scene_range(scene_name);
+
+			// A miss returns the manager's default entry (id -1), not null; the default
+			// entry pointers are only valid once the manager exists, so check both.
+			AetSetInfo* set_info = GetAetSetInfoByName(aet_mgr, &set_range);
+			if (set_info != nullptr && set_info->id != 0xFFFFFFFF)
+			{
+				entry->target_hit_effect_aetset_id = set_info->id;
+				entry->target_hit_effect_sprset_id = set_info->spr_set_id;
+			}
+
+			AetSceneInfo* scene_info = GetAetSceneInfoByName(aet_mgr, &scene_range);
+			if (scene_info != nullptr && scene_info->id != 0xFFFFFFFF)
+			{
+				entry->target_hit_effect_scene_id = scene_info->id;
+			}
+		}
+	}
 
 	return true;
 }

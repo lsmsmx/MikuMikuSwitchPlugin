@@ -30,7 +30,5 @@ namespace nc {
 
         mod_nc::init();
 
-        nc::init_save_data();
-
     }
 }
